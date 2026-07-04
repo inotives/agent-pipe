@@ -2,15 +2,23 @@
 id: task-0003
 title: "Phase 1: implement put ingestion"
 type: task
-status: todo
-assigned_to: "worker"
+status: done
+assigned_to: worker
 created_by: human
 created_on: 2026-07-04
 updated_on: 2026-07-04
 priority: normal
 parent: ""
-depends_on: [task-0002]
+depends_on:
+  - task-0002
+message: Implemented put ingestion with deterministic IDs, idempotent upserts,
+  config loading, and acceptance-focused coverage.
 ---
+
+
+
+
+
 
 # Task
 

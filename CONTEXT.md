@@ -16,6 +16,14 @@ _Avoid_: namespace, slug
 A configured record type inside a project, such as `coins_list`.
 _Avoid_: table, model, resource
 
+**Source**:
+A configured producer of records for an entity. A project may define different sources for different datapoints and ingestion types.
+_Avoid_: connector, integration, feed
+
+**Ingestion Type**:
+The source category that determines how records are collected, such as API, file, stream, or GraphQL.
+_Avoid_: source kind, adapter type
+
 **Record**:
 One captured entity item stored with a deterministic identity and JSON payload.
 _Avoid_: row, event, document

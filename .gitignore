@@ -1,0 +1,29 @@
+# AgentRig local/private state
+.agent-rig/.creds/
+.agent-rig/*/logs/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+
+# Environment files
+.env
+.env.local
+.env.dev
+.env.prod
+.env.*.local
+
+# Local tooling
+.codegraph/
+
+# Local public CSV downloads
+data/csv/*
+!data/csv/.gitkeep
+
+# OS/editor noise
+.DS_Store
+*.swp

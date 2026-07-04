@@ -2,15 +2,22 @@
 id: task-0001
 title: "Phase 1: scaffold TypeScript CLI"
 type: task
-status: ready
-assigned_to: worker
+status: done
+assigned_to: reviewer
 created_by: human
 created_on: 2026-07-04
 updated_on: 2026-07-04
 priority: normal
 parent: ""
 depends_on: []
+message: Scaffolded the TypeScript CLI, added scripts/deps, README quickstart,
+  lockfile, and passing help/test/typecheck checks.
 ---
+
+
+
+
+
 
 
 # Task

@@ -2,15 +2,27 @@
 id: task-0002
 title: "Phase 1: implement init and SQLite bootstrap"
 type: task
-status: todo
-assigned_to: "worker"
+status: done
+assigned_to: worker
 created_by: human
 created_on: 2026-07-04
 updated_on: 2026-07-04
 priority: normal
 parent: ""
-depends_on: [task-0001]
+depends_on:
+  - task-0001
+message: Matched the SQLite bootstrap schema to docs/project_specs.md, added
+  schema-column coverage, and re-verified init/typecheck/tests.
 ---
+
+
+
+
+
+
+
+
+
 
 # Task
 
@@ -58,3 +70,11 @@ Keep init rerunnable. Do not overwrite user-edited config files.
 - [ ] `npm test` passes.
 
 ## Notes
+
+Reviewer return:
+
+- `src/init.ts` creates shortened `records` and `job_runs` schemas that do not match `docs/project_specs.md`.
+- Expected `records` includes `id`, `project_id`, `entity`, `local_id`, `source`, `captured_at`, `payload_json`, `metadata_json`, `created_at`, `updated_at`, `deleted_at`, and `unique (project_id, entity, local_id)`.
+- Expected `job_runs` includes `id`, `job_id`, `entity`, `status`, `started_at`, `finished_at`, `records_written`, `error_message`, and `metadata_json`.
+- Review smoke showed current columns: `records: entity,record_id,payload_json,created_at,updated_at`; `job_runs: job_id,started_at,completed_at,status`.
+- `npm test` and `npm run typecheck` pass, but tests only assert table names, so add schema-column coverage before returning to review.

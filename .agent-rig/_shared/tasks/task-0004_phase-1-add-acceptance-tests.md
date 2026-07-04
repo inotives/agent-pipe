@@ -2,15 +2,23 @@
 id: task-0004
 title: "Phase 1: add acceptance tests"
 type: task
-status: todo
-assigned_to: "worker"
+status: done
+assigned_to: worker
 created_by: human
 created_on: 2026-07-04
 updated_on: 2026-07-04
 priority: normal
 parent: ""
-depends_on: [task-0003]
+depends_on:
+  - task-0003
+message: Reviewed Phase 1 acceptance tests and README. npm test and npm run
+  typecheck pass; tests cover init/put/idempotency/README, use temp dirs and
+  child-process CLI, and leave no extra repo artifacts.
 ---
+
+
+
+
 
 # Task
 

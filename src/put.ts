@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { ensureSupportedSchemaVersion } from "./init.js";
 import { findProjectRoot, validateProjectId } from "./project.js";
+import { buildRecordRows, upsertRecords } from "./records.js";
 
 const inputRecordSchema = z.record(z.string(), z.unknown());
 const inputPayloadSchema = z.union([inputRecordSchema, z.array(inputRecordSchema)]);
@@ -27,20 +28,6 @@ type PutResult = {
   projectId: string;
   entity: string;
   recordsWritten: number;
-};
-
-type RecordRow = {
-  id: string;
-  project_id: string;
-  entity: string;
-  local_id: string;
-  source: string;
-  captured_at: string;
-  payload_json: string;
-  metadata_json: string;
-  created_at: string;
-  updated_at: string;
-  deleted_at: null;
 };
 
 export function runPut(cwd: string, options: PutOptions): PutResult {
@@ -82,45 +69,19 @@ export function runPut(cwd: string, options: PutOptions): PutResult {
   }
 
   const payloads = loadInputPayloads(inputPath);
-  const rows = buildRows({
+  const rows = buildRecordRows({
     entity: options.entity,
     idFields: entityConfig.idFields,
-    inputFile: options.file,
     payloads,
     projectId,
+    source: "file",
+    metadataForPayload: () => ({ inputFile: options.file }),
   });
 
   const database = new Database(databasePath);
   try {
     ensureSupportedSchemaVersion(database);
-
-    const upsert = database.prepare(`
-      insert into records (
-        id, project_id, entity, local_id, source, captured_at, payload_json,
-        metadata_json, created_at, updated_at, deleted_at
-      ) values (
-        @id, @project_id, @entity, @local_id, @source, @captured_at, @payload_json,
-        @metadata_json, @created_at, @updated_at, @deleted_at
-      )
-      on conflict(id) do update set
-        project_id = excluded.project_id,
-        entity = excluded.entity,
-        local_id = excluded.local_id,
-        source = excluded.source,
-        captured_at = excluded.captured_at,
-        payload_json = excluded.payload_json,
-        metadata_json = excluded.metadata_json,
-        updated_at = excluded.updated_at,
-        deleted_at = excluded.deleted_at
-    `);
-
-    const writeAll = database.transaction((items: RecordRow[]) => {
-      for (const row of items) {
-        upsert.run(row);
-      }
-    });
-
-    writeAll([...rows.values()]);
+    upsertRecords(database, rows.values());
   } finally {
     database.close();
   }
@@ -222,53 +183,4 @@ function loadInputPayloads(inputPath: string): Array<Record<string, unknown>> {
     throw new Error("input JSON must be an object or an array of objects");
   }
   return Array.isArray(parsed.data) ? parsed.data : [parsed.data];
-}
-
-function buildRows(input: {
-  entity: string;
-  idFields: string[];
-  inputFile: string;
-  payloads: Array<Record<string, unknown>>;
-  projectId: string;
-}): Map<string, RecordRow> {
-  const rows = new Map<string, RecordRow>();
-
-  for (const payload of input.payloads) {
-    const localIdValues = input.idFields.map((field) => {
-      if (!(field in payload)) {
-        throw new Error(`missing id field "${field}" for entity "${input.entity}"`);
-      }
-
-      const value = payload[field];
-      if (value === null) {
-        throw new Error(`id field "${field}" for entity "${input.entity}" cannot be null`);
-      }
-      if (value === "") {
-        throw new Error(`id field "${field}" for entity "${input.entity}" cannot be empty`);
-      }
-      if (Array.isArray(value) || (typeof value === "object" && value !== null)) {
-        throw new Error(`id field "${field}" for entity "${input.entity}" must be a scalar value`);
-      }
-      return value;
-    });
-
-    const localId = JSON.stringify(localIdValues);
-    const now = new Date().toISOString();
-    const id = `${input.projectId}:${input.entity}:${localId}`;
-    rows.set(id, {
-      id,
-      project_id: input.projectId,
-      entity: input.entity,
-      local_id: localId,
-      source: "file",
-      captured_at: now,
-      payload_json: JSON.stringify(payload),
-      metadata_json: JSON.stringify({ inputFile: input.inputFile }),
-      created_at: now,
-      updated_at: now,
-      deleted_at: null,
-    });
-  }
-
-  return rows;
 }

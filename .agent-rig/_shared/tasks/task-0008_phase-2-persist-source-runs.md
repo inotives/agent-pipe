@@ -2,7 +2,7 @@
 id: task-0008
 title: "Phase 2: persist source records and run status"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -11,8 +11,13 @@ priority: normal
 parent: ""
 depends_on:
   - task-0007
-message: ""
+message: "Reviewed: source run now persists job_runs state, partial paginated
+  failures keep earlier records while marking the run failed, and npm test plus
+  npm run typecheck passed."
 ---
+
+
+
 
 # Task
 
@@ -59,4 +64,3 @@ Avoid rollback machinery for partial paginated writes. The job status is the sou
 - [ ] `npm run typecheck` passes.
 
 ## Notes
-

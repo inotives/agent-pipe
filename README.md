@@ -1,6 +1,6 @@
 # agent-pipe
 
-Minimal local CLI scaffold for Agent Pipe Phase 1.
+Minimal local CLI scaffold for Agent Pipe Phase 2.
 
 ## Quickstart
 
@@ -11,10 +11,12 @@ npm test
 npm run typecheck
 ```
 
-Phase 1 workflow:
+Quick local workflow:
 
 ```bash
 npm run agent-pipe -- init
+npm run agent-pipe -- source list
+npm run agent-pipe -- source run coingecko_coins_list
 npm run agent-pipe -- put --entity coins_list --file ./coins.json
 ```
 

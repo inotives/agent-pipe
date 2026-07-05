@@ -2,7 +2,7 @@
 id: task-0009
 title: "Phase 2: add acceptance tests, docs, and live smoke"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -12,8 +12,13 @@ parent: ""
 depends_on:
   - task-0006
   - task-0008
-message: ""
+message: "Reviewed: added Phase 2 acceptance coverage and README source workflow
+  docs, fixed baseUrl path joining so CoinGecko keeps /api/v3, npm test and npm
+  run typecheck passed, and live coingecko_coins_list smoke succeeded with 17362
+  records and a succeeded job_run."
 ---
+
+
 
 # Task
 
@@ -53,4 +58,3 @@ The live smoke is a final manual verification step, not part of the default test
 - [ ] The repo is clean except intended Phase 2 changes after verification.
 
 ## Notes
-

@@ -12,6 +12,68 @@ const tempDirs: string[] = [];
 const repoRoot = path.resolve(__dirname, "..");
 const tsxLoader = path.join(repoRoot, "node_modules/tsx/dist/loader.mjs");
 const cliEntry = path.join(repoRoot, "src/index.ts");
+const expectedSourcesYaml = `sources:
+  coingecko_coins_list:
+    entity: coins_list
+    type: api
+    idFields:
+      - id
+    api:
+      baseUrl: https://api.coingecko.com/api/v3
+      endpoint: /coins/list
+      method: GET
+      query:
+        include_platform: false
+      payloadPath: $
+      pagination:
+        type: none
+      rateLimit:
+        minDelayMs: 10000
+
+  coingecko_coins_markets:
+    entity: coins_markets
+    type: api
+    idFields:
+      - id
+    api:
+      baseUrl: https://api.coingecko.com/api/v3
+      endpoint: /coins/markets
+      method: GET
+      query:
+        vs_currency: usd
+        per_page: 250
+      payloadPath: $
+      pagination:
+        type: page
+        pageParam: page
+        perPageParam: per_page
+        startPage: 1
+        maxPages: 2
+        stopWhen: empty_page
+      rateLimit:
+        minDelayMs: 10000
+
+  coingecko_coin_history:
+    entity: coin_history
+    type: api
+    idFields:
+      - id
+      - date
+    api:
+      baseUrl: https://api.coingecko.com/api/v3
+      endpoint: /coins/{id}/history
+      method: GET
+      params:
+        id: bitcoin
+      query:
+        date: 30-12-2025
+        localization: false
+      payloadPath: $
+      pagination:
+        type: none
+      rateLimit:
+        minDelayMs: 10000
+`;
 
 function makeTempProject(name: string): string {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), "agent-pipe-test-"));
@@ -61,7 +123,7 @@ describe("buildCli", () => {
     const program = buildCli();
     const names = program.commands.map((command) => command.name());
 
-    expect(names).toEqual(["init", "put"]);
+    expect(names).toEqual(["init", "put", "source"]);
   });
 });
 
@@ -81,7 +143,15 @@ describe("agent-pipe init", () => {
 
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/project.yaml"))).toBe(true);
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/schedules.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, ".agent-pipe/sources.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, ".agent-pipe/.env.local"))).toBe(true);
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/logs"))).toBe(true);
+    expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/sources.yaml"), "utf8")).toBe(
+      expectedSourcesYaml,
+    );
+    expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/.env.local"), "utf8")).toBe(
+      "# Local source credentials\n",
+    );
 
     const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), {
       readonly: true,
@@ -144,11 +214,19 @@ describe("agent-pipe init", () => {
       "projectId: kept\nprojectName: \"Keep Me\"\n",
       "utf8",
     );
+    fs.writeFileSync(path.join(projectDir, ".agent-pipe/sources.yaml"), "sources:\n  kept: true\n", "utf8");
+    fs.writeFileSync(path.join(projectDir, ".agent-pipe/.env.local"), "COINGECKO_API_KEY=keep-me\n", "utf8");
 
     runCli(projectDir, ["init", "--project-id", "custom_project", "--project-name", "Ignored Name"]);
 
     expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/project.yaml"), "utf8")).toBe(
       "projectId: kept\nprojectName: \"Keep Me\"\n",
+    );
+    expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/sources.yaml"), "utf8")).toBe(
+      "sources:\n  kept: true\n",
+    );
+    expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/.env.local"), "utf8")).toBe(
+      "COINGECKO_API_KEY=keep-me\n",
     );
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/data/local.sqlite"))).toBe(true);
   });

@@ -101,6 +101,36 @@ If this repository uses phase-based AgentRig planning:
 5. Push the branch and open a draft PR.
 6. After merge, archive the phase doc under `docs/_archived/`.
 
+## Publishing Draft PRs
+
+Use normal `git` and `gh` commands for branch, push, and PR creation. If the sandbox blocks `.git` writes or GitHub network access, rerun the same command with the agent's escalation mechanism instead of switching to another workflow.
+
+Common failure seen in this repo:
+
+```text
+fatal: cannot lock ref 'refs/heads/...': unable to create directory for .git/refs/heads/...
+```
+
+This means the sandbox blocked branch ref creation. The correct fix is to rerun the normal branch command outside the sandbox.
+
+Recommended flow when work was accidentally committed on `main` but should become a PR:
+
+```bash
+git status --short --branch
+git log -1 --oneline
+git switch -c codex/<short-description>
+git push -u origin codex/<short-description>
+gh pr create --draft --base main --head codex/<short-description> --title "[codex] <summary>" --body "<markdown summary>"
+git status --short --branch
+```
+
+Notes:
+
+- Do not push directly to `origin/main` when the intent is a PR.
+- Create the PR branch at the current commit, then push that branch.
+- If `gh auth status` or `gh repo view` fails only inside the sandbox, retry the needed `gh` command with escalation before assuming auth is broken.
+- Use an explicit PR title/body instead of relying on `--fill` when the PR should summarize a phase.
+
 ## Coding Guidelines
 
 ### Think Before Coding

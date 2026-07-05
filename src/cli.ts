@@ -4,6 +4,8 @@ import { z } from "zod";
 import { runInit } from "./init.js";
 import { validateProjectId } from "./project.js";
 import { runPut } from "./put.js";
+import { runSourceList } from "./source-list.js";
+import { runSource } from "./source-run.js";
 
 const putOptionsSchema = z.object({
   entity: z.string().regex(/^[a-z0-9_-]+$/, {
@@ -79,6 +81,34 @@ export function buildCli(): Command {
         process.stdout.write(`${JSON.stringify(result)}\n`);
       } catch (error) {
         fail(error instanceof Error ? error.message : "put failed");
+      }
+    });
+
+  const source = program.command("source").description("Inspect configured sources");
+
+  source
+    .command("list")
+    .description("List configured sources")
+    .option("--json", "print JSON for automation")
+    .action((options: { json?: boolean }) => {
+      try {
+        const output = runSourceList(process.cwd(), options);
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "source list failed");
+      }
+    });
+
+  source
+    .command("run")
+    .description("Run one configured source")
+    .argument("<sourceId>", "configured source id")
+    .action(async (sourceId: string) => {
+      try {
+        const result = await runSource(process.cwd(), { sourceId });
+        process.stdout.write(`${JSON.stringify(result)}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "source run failed");
       }
     });
 

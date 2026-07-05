@@ -28,6 +28,69 @@ type InitResult = {
 };
 
 const SUPPORTED_SCHEMA_VERSION = 1;
+const DEFAULT_SOURCES_YAML = `sources:
+  coingecko_coins_list:
+    entity: coins_list
+    type: api
+    idFields:
+      - id
+    api:
+      baseUrl: https://api.coingecko.com/api/v3
+      endpoint: /coins/list
+      method: GET
+      query:
+        include_platform: false
+      payloadPath: $
+      pagination:
+        type: none
+      rateLimit:
+        minDelayMs: 10000
+
+  coingecko_coins_markets:
+    entity: coins_markets
+    type: api
+    idFields:
+      - id
+    api:
+      baseUrl: https://api.coingecko.com/api/v3
+      endpoint: /coins/markets
+      method: GET
+      query:
+        vs_currency: usd
+        per_page: 250
+      payloadPath: $
+      pagination:
+        type: page
+        pageParam: page
+        perPageParam: per_page
+        startPage: 1
+        maxPages: 2
+        stopWhen: empty_page
+      rateLimit:
+        minDelayMs: 10000
+
+  coingecko_coin_history:
+    entity: coin_history
+    type: api
+    idFields:
+      - id
+      - date
+    api:
+      baseUrl: https://api.coingecko.com/api/v3
+      endpoint: /coins/{id}/history
+      method: GET
+      params:
+        id: bitcoin
+      query:
+        date: 30-12-2025
+        localization: false
+      payloadPath: $
+      pagination:
+        type: none
+      rateLimit:
+        minDelayMs: 10000
+`;
+const DEFAULT_ENV_LOCAL = "# Local source credentials\n";
 
 export function runInit(cwd: string, options: InitOptions): InitResult {
   assertNoParentProject(cwd);
@@ -54,6 +117,8 @@ export function runInit(cwd: string, options: InitOptions): InitResult {
     path.join(stateDir, "schedules.yaml"),
     "entities:\n  coins_list:\n    idFields:\n      - id\njobs: []\n",
   );
+  writeIfMissing(path.join(stateDir, "sources.yaml"), DEFAULT_SOURCES_YAML);
+  writeIfMissing(path.join(stateDir, ".env.local"), DEFAULT_ENV_LOCAL);
 
   bootstrapDatabase(databasePath);
 

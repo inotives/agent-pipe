@@ -2,7 +2,7 @@
 id: task-0005
 title: "Phase 2: initialize declarative source config"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -10,8 +10,12 @@ updated_on: 2026-07-05
 priority: normal
 parent: ""
 depends_on: []
-message: ""
+message: "Reviewed: sources.yaml and .env.local init defaults match phase-2 doc;
+  npm test and npm run typecheck passed."
 ---
+
+
+
 
 # Task
 
@@ -50,4 +54,3 @@ Keep this task limited to init/config creation. Do not implement source executio
 - [ ] `npm run typecheck` passes.
 
 ## Notes
-

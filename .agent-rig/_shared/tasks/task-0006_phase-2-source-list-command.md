@@ -2,7 +2,7 @@
 id: task-0006
 title: "Phase 2: add source list command"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -11,8 +11,21 @@ priority: normal
 parent: ""
 depends_on:
   - task-0005
-message: ""
+message: "Reviewed: source list now uses a real YAML parser, malformed
+  sources.yaml repro is covered, and npm test plus npm run typecheck passed."
 ---
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Task
 
@@ -49,4 +62,14 @@ Do not add `source validate` in Phase 2. Full validation belongs to `source run`
 - [ ] `npm run typecheck` passes.
 
 ## Notes
-
+- Reviewer return 2026-07-05: `source list` still does regex-based pseudo-parsing instead of real YAML parsing, so it does not reliably reject unparseable `sources.yaml`.
+- Repro used in review:
+  ```yaml
+  sources:
+    bad_source:
+      entity: [broken
+      type: api
+  ```
+- Current behavior: `source list --json` returns `[{"sourceId":"bad_source","entity":"[broken","type":"api"}]`.
+- Expected behavior: fail clearly with `invalid .agent-pipe/sources.yaml`.
+- Smallest fix: load `sources.yaml` with a real YAML parser, then derive the source summaries from the parsed object instead of line-by-line regex extraction.

@@ -92,8 +92,12 @@ describe("Phase acceptance", () => {
   it("covers Phase 1 init, put, rerun idempotence, and README quickstart content", () => {
     const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
     expect(readme).toContain("npm run agent-pipe -- init");
+    expect(readme).toContain("npm run agent-pipe -- records list");
+    expect(readme).toContain(`npm run agent-pipe -- records show 'my-project:coins_list:[\"bitcoin\"]'`);
     expect(readme).toContain("npm run agent-pipe -- source list");
     expect(readme).toContain("npm run agent-pipe -- source run coingecko_coins_list");
+    expect(readme).toContain("npm run agent-pipe -- runs list");
+    expect(readme).toContain("npm run agent-pipe -- runs show '<job-run-id>'");
     expect(readme).toContain("npm run agent-pipe -- put --entity coins_list --file ./coins.json");
     expect(readme).toContain("npm test");
     expect(readme).toContain("npm run typecheck");
@@ -125,6 +129,34 @@ describe("Phase acceptance", () => {
       recordsWritten: 2,
     });
     expect(secondPut.recordsWritten).toBe(2);
+
+    const recordsList = runCli(projectDir, ["records", "list"]);
+    expect(recordsList).toContain("ID");
+    expect(recordsList).toContain('acceptance-project:coins_list:["bitcoin"]');
+    expect(recordsList).toContain('acceptance-project:coins_list:["ethereum"]');
+
+    const recordShow = JSON.parse(
+      runCli(projectDir, ["records", "show", 'acceptance-project:coins_list:["bitcoin"]']),
+    ) as {
+      id: string;
+      project_id: string;
+      entity: string;
+      local_id: string;
+      source: string | null;
+      payload: Record<string, unknown>;
+      metadata: Record<string, unknown> | null;
+      deleted_at: string | null;
+    };
+    expect(recordShow).toMatchObject({
+      id: 'acceptance-project:coins_list:["bitcoin"]',
+      project_id: "acceptance-project",
+      entity: "coins_list",
+      local_id: '["bitcoin"]',
+      source: "file",
+      payload: { id: "bitcoin", symbol: "btc", name: "Bitcoin" },
+      metadata: { inputFile: "./coins.json" },
+      deleted_at: null,
+    });
 
     const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), {
       readonly: true,
@@ -250,6 +282,7 @@ describe("Phase acceptance", () => {
       const historyRunResult = await runCliAsync(projectDir, ["source", "run", "smoke_history"]);
       expect(historyRunResult.stderr).toBe("");
       const historyRun = JSON.parse(historyRunResult.stdout) as {
+        jobRunId: string;
         recordsWritten: number;
       };
       expect(historyRun.recordsWritten).toBe(1);
@@ -257,6 +290,12 @@ describe("Phase acceptance", () => {
       const flakyRun = await runCliAsync(projectDir, ["source", "run", "flaky_page"]);
       expect(flakyRun.stdout).toBe("");
       expect(flakyRun.stderr).toContain("request failed with status 500");
+
+      const runsList = await runCliAsync(projectDir, ["runs", "list"]);
+      expect(runsList.stderr).toBe("");
+      expect(runsList.stdout).toContain("JOB_ID");
+      expect(runsList.stdout).toContain("smoke_list");
+      expect(runsList.stdout).toContain("flaky_page");
 
       const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), {
         readonly: true,
@@ -266,8 +305,9 @@ describe("Phase acceptance", () => {
           .prepare("select id, source, metadata_json from records order by id")
           .all() as Array<{ id: string; source: string; metadata_json: string }>;
         const jobRuns = database
-          .prepare("select job_id, status, records_written, error_message from job_runs order by started_at, id")
+          .prepare("select id, job_id, status, records_written, error_message from job_runs order by started_at, id")
           .all() as Array<{
+            id: string;
             job_id: string;
             status: string;
             records_written: number;
@@ -292,24 +332,44 @@ describe("Phase acceptance", () => {
         });
         expect(jobRuns).toEqual([
           {
+            id: listRun.jobRunId,
             job_id: "smoke_list",
             status: "succeeded",
             records_written: 2,
             error_message: null,
           },
           {
+            id: historyRun.jobRunId,
             job_id: "smoke_history",
             status: "succeeded",
             records_written: 1,
             error_message: null,
           },
           {
+            id: jobRuns[2]!.id,
             job_id: "flaky_page",
             status: "failed",
             records_written: 1,
             error_message: expect.stringContaining("request failed with status 500"),
           },
         ]);
+
+        const runShow = JSON.parse(runCli(projectDir, ["runs", "show", jobRuns[2]!.id])) as {
+          id: string;
+          job_id: string;
+          status: string;
+          records_written: number;
+          error_message: string | null;
+          metadata: Record<string, unknown> | null;
+        };
+        expect(runShow).toMatchObject({
+          id: jobRuns[2]!.id,
+          job_id: "flaky_page",
+          status: "failed",
+          records_written: 1,
+          error_message: expect.stringContaining("request failed with status 500"),
+          metadata: { sourceId: "flaky_page" },
+        });
       } finally {
         database.close();
       }

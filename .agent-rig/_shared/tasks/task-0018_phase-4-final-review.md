@@ -2,7 +2,7 @@
 id: task-0018
 title: "Phase 4: final verification and task cleanup"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -11,8 +11,13 @@ priority: normal
 parent: ""
 depends_on:
   - task-0017
-message: ""
+message: "Reviewed: Phase 4 task statuses and messages are current, the README
+  and CLI surface match the manual job runner doc, and npm test plus npm run
+  typecheck and git diff --check all passed."
 ---
+
+
+
 
 # Task
 

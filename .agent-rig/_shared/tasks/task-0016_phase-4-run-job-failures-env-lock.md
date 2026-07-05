@@ -2,7 +2,7 @@
 id: task-0016
 title: "Phase 4: add run --job failure, env, timeout, and lock behavior"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -11,8 +11,15 @@ priority: normal
 parent: ""
 depends_on:
   - task-0015
-message: ""
+message: Completed run --job failure semantics, env loading, timeout handling,
+  same-job lock, and focused tests.
 ---
+
+
+
+
+
+
 
 # Task
 
@@ -65,3 +72,8 @@ Finish `run --job` runtime behavior for failures, environment loading, timeout, 
 - [ ] `npm run typecheck` passes.
 
 ## Notes
+- Reviewer return 2026-07-05:
+  - `src/job-run.ts:51-60` loads schedules and resolves `schedules.jobs[options.jobId]` before opening the database or inserting any `job_runs` row.
+  - That means pre-execution failures like unknown job and invalid job config/unknown entity return an error but leave no run-history row at all. I verified this with an isolated temp project: `agent-pipe run --job missing_job` failed, and `agent-pipe runs list --json` still returned `[]`.
+  - This misses the Phase 4 contract that `run --job` writes a `job_runs` row for every attempted run and that unknown/invalid config failures are represented as `failed`.
+  - Fix expectation: insert a failed run row for pre-execution job lookup/config errors too, and add focused coverage that asserts the `job_runs` row exists with `status = failed` for at least unknown job and invalid job config.

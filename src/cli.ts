@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import { z } from "zod";
 
+import { runJob } from "./job-run.js";
+import { runJobsList } from "./jobs-list.js";
 import { runInit } from "./init.js";
 import { validateProjectId } from "./project.js";
 import { runPut } from "./put.js";
@@ -111,6 +113,34 @@ export function buildCli(): Command {
         process.stdout.write(`${JSON.stringify(result)}\n`);
       } catch (error) {
         fail(error instanceof Error ? error.message : "source run failed");
+      }
+    });
+
+  const jobs = program.command("jobs").description("Inspect configured jobs");
+
+  jobs
+    .command("list")
+    .description("List configured jobs")
+    .option("--json", "print JSON for automation")
+    .action((options: { json?: boolean }) => {
+      try {
+        const output = runJobsList(process.cwd(), options);
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "jobs list failed");
+      }
+    });
+
+  program
+    .command("run")
+    .description("Run one configured job")
+    .requiredOption("--job <jobId>", "configured job id")
+    .action(async (options: { job: string }) => {
+      try {
+        const result = await runJob(process.cwd(), { jobId: options.job });
+        process.stdout.write(`${JSON.stringify(result)}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "job run failed");
       }
     });
 

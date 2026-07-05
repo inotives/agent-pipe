@@ -1,6 +1,6 @@
 # agent-pipe
 
-Minimal local CLI for Agent Pipe Phase 3 visibility workflows.
+Minimal local CLI for Agent Pipe Phase 4 manual job workflows.
 
 ## Quickstart
 
@@ -18,6 +18,8 @@ npm run agent-pipe -- init
 npm run agent-pipe -- put --entity coins_list --file ./coins.json
 npm run agent-pipe -- records list
 npm run agent-pipe -- records show 'my-project:coins_list:["bitcoin"]'
+npm run agent-pipe -- jobs list
+npm run agent-pipe -- run --job collect_prices
 npm run agent-pipe -- source list
 npm run agent-pipe -- source run coingecko_coins_list
 npm run agent-pipe -- runs list

@@ -2,7 +2,7 @@
 id: task-0015
 title: "Phase 4: implement run --job success path"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -11,8 +11,13 @@ priority: normal
 parent: ""
 depends_on:
   - task-0014
-message: ""
+message: Implemented run --job success path with shared runtime helpers and
+  focused tests.
 ---
+
+
+
+
 
 # Task
 

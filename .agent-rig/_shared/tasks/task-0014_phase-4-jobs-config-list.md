@@ -2,7 +2,7 @@
 id: task-0014
 title: "Phase 4: add jobs config parsing and jobs list"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -10,8 +10,15 @@ updated_on: 2026-07-05
 priority: normal
 parent: ""
 depends_on: []
-message: ""
+message: Implemented shared schedules parsing, jobs list CLI, init jobs default,
+  and focused tests.
 ---
+
+
+
+
+
+
 
 # Task
 
@@ -64,3 +71,13 @@ Add job config parsing and `agent-pipe jobs list`.
 - [ ] `npm run typecheck` passes.
 
 ## Notes
+- Reviewer return 2026-07-05:
+  - `src/schedules.ts:43-49` only rewrites `ZodError` messages when the first path segment is `"jobs"`, but `parseJobs()` validates the raw jobs map directly. For malformed entries like:
+    ```yaml
+    jobs:
+      broken_job:
+        entity: coins_list
+    ```
+    the zod issue path starts with `["broken_job", "command"]`, so the CLI falls through to the generic `invalid .agent-pipe/schedules.yaml`.
+  - This misses the task requirement that invalid job config fails clearly.
+  - Fix expectation: malformed job entries should identify the job, e.g. `invalid job "broken_job"`, and add focused coverage for a structurally invalid job entry, not just unknown entity.

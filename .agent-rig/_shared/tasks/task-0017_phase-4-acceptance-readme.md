@@ -2,7 +2,7 @@
 id: task-0017
 title: "Phase 4: add acceptance coverage and README job workflow"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -11,8 +11,12 @@ priority: normal
 parent: ""
 depends_on:
   - task-0016
-message: ""
+message: Added Phase 4 acceptance coverage and README manual job workflow.
 ---
+
+
+
+
 
 # Task
 

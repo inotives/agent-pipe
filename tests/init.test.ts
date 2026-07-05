@@ -123,7 +123,7 @@ describe("buildCli", () => {
     const program = buildCli();
     const names = program.commands.map((command) => command.name());
 
-    expect(names).toEqual(["init", "put", "source", "records", "runs"]);
+    expect(names).toEqual(["init", "put", "source", "jobs", "run", "records", "runs"]);
   });
 });
 
@@ -148,6 +148,9 @@ describe("agent-pipe init", () => {
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/logs"))).toBe(true);
     expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/sources.yaml"), "utf8")).toBe(
       expectedSourcesYaml,
+    );
+    expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/schedules.yaml"), "utf8")).toBe(
+      "entities:\n  coins_list:\n    idFields:\n      - id\njobs: {}\n",
     );
     expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/.env.local"), "utf8")).toBe(
       "# Local source credentials\n",

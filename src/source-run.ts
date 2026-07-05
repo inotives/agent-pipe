@@ -7,8 +7,16 @@ import { parse } from "yaml";
 import { z } from "zod";
 
 import { ensureSupportedSchemaVersion } from "./init.js";
-import { findProjectRoot, validateProjectId } from "./project.js";
+import { findProjectRoot } from "./project.js";
 import { buildRecordRows, upsertRecords } from "./records.js";
+import {
+  insertJobRun,
+  loadEnvLocal,
+  loadProjectId,
+  readJobRunRecordsWritten,
+  updateJobRun,
+  updateJobRunRecordsWritten,
+} from "./runtime.js";
 
 const scalarValueSchema = z.union([z.string(), z.number(), z.boolean()]);
 const sourceConfigSchema = z.object({
@@ -171,18 +179,6 @@ export async function runSource(cwd: string, options: SourceRunOptions): Promise
   }
 }
 
-function loadProjectId(projectConfigPath: string): string {
-  try {
-    const parsed = parse(fs.readFileSync(projectConfigPath, "utf8")) as { projectId?: unknown };
-    if (!parsed || typeof parsed !== "object" || typeof parsed.projectId !== "string") {
-      throw new Error("invalid");
-    }
-    return validateProjectId(parsed.projectId);
-  } catch {
-    throw new Error("invalid .agent-pipe/project.yaml");
-  }
-}
-
 function loadSelectedSource(sourcesPath: string, sourceId: string): z.infer<typeof sourceConfigSchema> {
   try {
     const parsed = parse(fs.readFileSync(sourcesPath, "utf8")) as { sources?: Record<string, unknown> };
@@ -203,25 +199,6 @@ function loadSelectedSource(sourcesPath: string, sourceId: string): z.infer<type
     }
     throw new Error("invalid .agent-pipe/sources.yaml");
   }
-}
-
-function loadEnvLocal(envLocalPath: string): Record<string, string> {
-  if (!fs.existsSync(envLocalPath)) {
-    return {};
-  }
-  const result: Record<string, string> = {};
-  for (const rawLine of fs.readFileSync(envLocalPath, "utf8").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (!match) {
-      continue;
-    }
-    result[match[1]] = match[2];
-  }
-  return result;
 }
 
 function resolveValues(
@@ -320,68 +297,6 @@ async function fetchSourcePayloads(input: {
     }
     page += 1;
   }
-}
-
-function insertJobRun(database: Database.Database, input: {
-  id: string;
-  jobId: string;
-  entity: string;
-  status: string;
-  startedAt: string;
-  metadataJson: string | null;
-}): void {
-  database
-    .prepare(`
-      insert into job_runs (
-        id, job_id, entity, status, started_at, finished_at, records_written, error_message, metadata_json
-      ) values (
-        @id, @job_id, @entity, @status, @started_at, null, 0, null, @metadata_json
-      )
-    `)
-    .run({
-      id: input.id,
-      job_id: input.jobId,
-      entity: input.entity,
-      status: input.status,
-      started_at: input.startedAt,
-      metadata_json: input.metadataJson,
-    });
-}
-
-function updateJobRunRecordsWritten(database: Database.Database, id: string, recordsWritten: number): void {
-  database.prepare("update job_runs set records_written = ? where id = ?").run(recordsWritten, id);
-}
-
-function updateJobRun(database: Database.Database, input: {
-  id: string;
-  status: string;
-  finishedAt: string;
-  recordsWritten: number;
-  errorMessage: string | null;
-}): void {
-  database
-    .prepare(`
-      update job_runs
-      set status = @status,
-          finished_at = @finished_at,
-          records_written = @records_written,
-          error_message = @error_message
-      where id = @id
-    `)
-    .run({
-      id: input.id,
-      status: input.status,
-      finished_at: input.finishedAt,
-      records_written: input.recordsWritten,
-      error_message: input.errorMessage,
-    });
-}
-
-function readJobRunRecordsWritten(database: Database.Database, id: string): number {
-  const row = database.prepare("select records_written from job_runs where id = ?").get(id) as
-    | { records_written: number }
-    | undefined;
-  return row?.records_written ?? 0;
 }
 
 function readPagination(

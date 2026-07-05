@@ -115,7 +115,7 @@ export function runInit(cwd: string, options: InitOptions): InitResult {
   );
   writeIfMissing(
     path.join(stateDir, "schedules.yaml"),
-    "entities:\n  coins_list:\n    idFields:\n      - id\njobs: []\n",
+    "entities:\n  coins_list:\n    idFields:\n      - id\njobs: {}\n",
   );
   writeIfMissing(path.join(stateDir, "sources.yaml"), DEFAULT_SOURCES_YAML);
   writeIfMissing(path.join(stateDir, ".env.local"), DEFAULT_ENV_LOCAL);

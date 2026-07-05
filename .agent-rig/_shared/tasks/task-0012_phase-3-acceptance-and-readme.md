@@ -2,7 +2,7 @@
 id: task-0012
 title: "Phase 3: add acceptance coverage and README visibility workflow"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -12,8 +12,13 @@ parent: ""
 depends_on:
   - task-0010
   - task-0011
-message: ""
+message: "Reviewed: acceptance coverage now exercises records list/show and runs
+  list/show in real initialized projects, README includes the Phase 3 visibility
+  workflow, and npm test plus npm run typecheck and git diff --check passed."
 ---
+
+
+
 
 # Task
 

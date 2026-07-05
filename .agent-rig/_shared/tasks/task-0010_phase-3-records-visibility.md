@@ -2,7 +2,7 @@
 id: task-0010
 title: "Phase 3: add records visibility commands"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -10,8 +10,13 @@ updated_on: 2026-07-05
 priority: normal
 parent: ""
 depends_on: []
-message: ""
+message: "Reviewed: records list/show match the Phase 3 contract,
+  tests/records.test.ts passed, npm run typecheck passed, and git diff --check
+  was clean."
 ---
+
+
+
 
 # Task
 

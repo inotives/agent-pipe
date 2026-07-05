@@ -2,7 +2,7 @@
 id: task-0013
 title: "Phase 3: final verification and task cleanup"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-05
@@ -11,8 +11,16 @@ priority: normal
 parent: ""
 depends_on:
   - task-0012
-message: ""
+message: "Reviewed: Phase 3 task statuses and review messages are current,
+  README now matches the Phase 3 visibility surface, and npm test plus npm run
+  typecheck and git diff --check passed."
 ---
+
+
+
+
+
+
 
 # Task
 
@@ -46,3 +54,8 @@ This is a small final gate so the committer can trust the phase is complete.
 - [ ] No known Phase 3 doc/implementation mismatch remains.
 
 ## Notes
+
+- Reviewer finding 2026-07-05:
+  - `README.md` still says `Minimal local CLI scaffold for Agent Pipe Phase 2.` on line 3, but the current Phase 3 surface and quickstart already include `records list/show` and `runs list/show`.
+  - This blocks the acceptance criterion `No known Phase 3 doc/implementation mismatch remains.`
+  - Fix by updating the README summary line so it reflects the current Phase 3 repo state.

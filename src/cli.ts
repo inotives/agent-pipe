@@ -4,6 +4,8 @@ import { z } from "zod";
 import { runInit } from "./init.js";
 import { validateProjectId } from "./project.js";
 import { runPut } from "./put.js";
+import { runRecordsList, runRecordsShow } from "./records-query.js";
+import { runRunsList, runRunsShow } from "./runs-query.js";
 import { runSourceList } from "./source-list.js";
 import { runSource } from "./source-run.js";
 
@@ -109,6 +111,69 @@ export function buildCli(): Command {
         process.stdout.write(`${JSON.stringify(result)}\n`);
       } catch (error) {
         fail(error instanceof Error ? error.message : "source run failed");
+      }
+    });
+
+  const records = program.command("records").description("Inspect stored records");
+
+  records
+    .command("list")
+    .description("List stored records")
+    .option("--entity <entity>", "filter by entity")
+    .option("--source <source>", "filter by source")
+    .option("--limit <limit>", "maximum rows to return")
+    .option("--include-deleted", "include soft-deleted rows")
+    .option("--json", "print JSON for automation")
+    .action((options: { entity?: string; source?: string; limit?: string; includeDeleted?: boolean; json?: boolean }) => {
+      try {
+        const output = runRecordsList(process.cwd(), options);
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "records list failed");
+      }
+    });
+
+  records
+    .command("show")
+    .description("Show one stored record")
+    .argument("<id>", "stored record id")
+    .action((id: string) => {
+      try {
+        const output = runRecordsShow(process.cwd(), id);
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "records show failed");
+      }
+    });
+
+  const runs = program.command("runs").description("Inspect stored run history");
+
+  runs
+    .command("list")
+    .description("List stored runs")
+    .option("--status <status>", "filter by status")
+    .option("--job-id <jobId>", "filter by job id")
+    .option("--limit <limit>", "maximum rows to return")
+    .option("--json", "print JSON for automation")
+    .action((options: { status?: string; jobId?: string; limit?: string; json?: boolean }) => {
+      try {
+        const output = runRunsList(process.cwd(), options);
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "runs list failed");
+      }
+    });
+
+  runs
+    .command("show")
+    .description("Show one stored run")
+    .argument("<id>", "stored run id")
+    .action((id: string) => {
+      try {
+        const output = runRunsShow(process.cwd(), id);
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "runs show failed");
       }
     });
 

@@ -119,11 +119,11 @@ afterEach(() => {
 });
 
 describe("buildCli", () => {
-  it("registers the phase 1 commands", () => {
+  it("registers the current top-level commands", () => {
     const program = buildCli();
     const names = program.commands.map((command) => command.name());
 
-    expect(names).toEqual(["init", "put", "source"]);
+    expect(names).toEqual(["init", "put", "source", "records", "runs"]);
   });
 });
 

@@ -2,7 +2,7 @@
 id: task-0022
 title: "Phase 5: add runs clear-running --job-id"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
@@ -11,8 +11,14 @@ priority: normal
 parent: ""
 depends_on:
   - task-0021
-message: ""
+message: "Reviewed: runs clear-running now updates only matching running rows
+  for the requested job, stamps finished_at and the operator-cleared error
+  message, returns compact { jobId, cleared } JSON including zero-row success,
+  and npm test plus npm run typecheck and git diff --check all passed."
 ---
+
+
+
 
 # Task
 

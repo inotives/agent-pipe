@@ -249,4 +249,90 @@ describe("agent-pipe runs", () => {
     expect(() => runCli(projectDir, ["runs", "list", "--limit", "0"])).toThrow(/--limit must be a positive integer/);
     expect(() => runCli(projectDir, ["runs", "show", "missing-run"])).toThrow(/unknown run "missing-run"/);
   });
+
+  it("clears only matching running rows for one job", () => {
+    const projectDir = makeTempProject("runs-clear-running");
+    seedRuns(projectDir);
+    insertRun(projectDir, {
+      id: "run-4",
+      jobId: "coingecko_coins_list",
+      entity: "coins_list",
+      status: "running",
+      startedAt: "2026-07-05T15:00:00.000Z",
+      recordsWritten: 0,
+      metadata: null,
+    });
+    insertRun(projectDir, {
+      id: "run-5",
+      jobId: "coingecko_coins_markets",
+      entity: "coins_markets",
+      status: "running",
+      startedAt: "2026-07-05T16:00:00.000Z",
+      recordsWritten: 0,
+      metadata: null,
+    });
+
+    const output = JSON.parse(runCli(projectDir, ["runs", "clear-running", "--job-id", "coingecko_coins_list"]).stdout) as {
+      jobId: string;
+      cleared: number;
+    };
+
+    expect(output).toEqual({ jobId: "coingecko_coins_list", cleared: 2 });
+
+    withDatabase(projectDir, (database) => {
+      const rows = database
+        .prepare("select id, job_id, status, finished_at, error_message from job_runs order by started_at, id")
+        .all() as Array<Record<string, unknown>>;
+
+      expect(rows).toEqual([
+        {
+          id: "run-1",
+          job_id: "coingecko_coins_list",
+          status: "succeeded",
+          finished_at: "2026-07-05T12:01:00.000Z",
+          error_message: null,
+        },
+        {
+          id: "run-2",
+          job_id: "coingecko_coins_markets",
+          status: "failed",
+          finished_at: "2026-07-05T13:01:00.000Z",
+          error_message: "request failed with status 429",
+        },
+        {
+          id: "run-3",
+          job_id: "coingecko_coins_list",
+          status: "failed",
+          finished_at: expect.any(String),
+          error_message: "cleared running job by operator",
+        },
+        {
+          id: "run-4",
+          job_id: "coingecko_coins_list",
+          status: "failed",
+          finished_at: expect.any(String),
+          error_message: "cleared running job by operator",
+        },
+        {
+          id: "run-5",
+          job_id: "coingecko_coins_markets",
+          status: "running",
+          finished_at: null,
+          error_message: null,
+        },
+      ]);
+    });
+  });
+
+  it("succeeds with cleared 0 when no matching running rows exist", () => {
+    const projectDir = makeTempProject("runs-clear-running-empty");
+    seedRuns(projectDir);
+
+    const output = JSON.parse(runCli(projectDir, ["runs", "clear-running", "--job-id", "missing_job"]).stdout) as {
+      jobId: string;
+      cleared: number;
+    };
+
+    expect(output).toEqual({ jobId: "missing_job", cleared: 0 });
+  });
 });

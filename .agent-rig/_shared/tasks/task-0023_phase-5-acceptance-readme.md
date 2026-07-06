@@ -2,7 +2,7 @@
 id: task-0023
 title: "Phase 5: add acceptance coverage and README scheduler workflow"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
@@ -11,8 +11,15 @@ priority: normal
 parent: ""
 depends_on:
   - task-0022
-message: ""
+message: "Reviewed: Phase 5 acceptance coverage now exercises init plus a due
+  cron job through scheduler start --once with record and run-history
+  verification, the README quick workflow includes scheduler start --once,
+  scheduler start, and runs clear-running --job-id, and npm test plus npm run
+  typecheck and git diff --check all passed."
 ---
+
+
+
 
 # Task
 

@@ -7,7 +7,8 @@ import { runInit } from "./init.js";
 import { validateProjectId } from "./project.js";
 import { runPut } from "./put.js";
 import { runRecordsList, runRecordsShow } from "./records-query.js";
-import { runRunsList, runRunsShow } from "./runs-query.js";
+import { runRunsClearRunning, runRunsList, runRunsShow } from "./runs-query.js";
+import { runSchedulerStart } from "./scheduler.js";
 import { runSourceList } from "./source-list.js";
 import { runSource } from "./source-run.js";
 
@@ -27,6 +28,19 @@ function writeStub(payload: StubPayload): void {
 function fail(message: string): never {
   process.stderr.write(`${message}\n`);
   process.exit(1);
+}
+
+function parsePollIntervalMsOption(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error("poll interval must be a positive integer");
+  }
+
+  return parsed;
 }
 
 export function buildCli(): Command {
@@ -144,6 +158,32 @@ export function buildCli(): Command {
       }
     });
 
+  const scheduler = program.command("scheduler").description("Run local scheduled jobs");
+
+  scheduler
+    .command("start")
+    .description("Start the local scheduler")
+    .option("--once", "run one scheduler tick and exit")
+    .option("--poll-interval-ms <ms>", "milliseconds between scheduler ticks")
+    .action(async (options: { once?: boolean; pollIntervalMs?: string }) => {
+      let pollIntervalMs: number | undefined;
+      try {
+        pollIntervalMs = parsePollIntervalMsOption(options.pollIntervalMs);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "invalid poll interval");
+      }
+
+      try {
+        const output = await runSchedulerStart(process.cwd(), {
+          once: options.once,
+          pollIntervalMs,
+        });
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "scheduler start failed");
+      }
+    });
+
   const records = program.command("records").description("Inspect stored records");
 
   records
@@ -204,6 +244,19 @@ export function buildCli(): Command {
         process.stdout.write(`${output}\n`);
       } catch (error) {
         fail(error instanceof Error ? error.message : "runs show failed");
+      }
+    });
+
+  runs
+    .command("clear-running")
+    .description("Mark running rows for one job as failed")
+    .requiredOption("--job-id <jobId>", "configured job id")
+    .action((options: { jobId: string }) => {
+      try {
+        const output = runRunsClearRunning(process.cwd(), options.jobId);
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "runs clear-running failed");
       }
     });
 

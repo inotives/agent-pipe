@@ -2,7 +2,7 @@
 id: task-0020
 title: "Phase 5: add scheduler start --once due-job execution"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
@@ -11,8 +11,14 @@ priority: normal
 parent: ""
 depends_on:
   - task-0019
-message: ""
+message: "Reviewed: scheduler start --once now emits JSON-line tick events, runs
+  only due cron jobs through the existing job runner, leaves manual and
+  missing-schedule jobs untouched, and npm test plus npm run typecheck and git
+  diff --check all passed."
 ---
+
+
+
 
 # Task
 

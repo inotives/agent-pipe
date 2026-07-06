@@ -123,7 +123,7 @@ describe("buildCli", () => {
     const program = buildCli();
     const names = program.commands.map((command) => command.name());
 
-    expect(names).toEqual(["init", "put", "source", "jobs", "run", "records", "runs"]);
+    expect(names).toEqual(["init", "put", "source", "jobs", "run", "scheduler", "records", "runs"]);
   });
 });
 

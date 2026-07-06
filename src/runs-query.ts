@@ -90,7 +90,28 @@ export function runRunsShow(cwd: string, id: string): string {
   }
 }
 
-function openProjectDatabase(cwd: string): Database.Database {
+export function runRunsClearRunning(cwd: string, jobId: string): string {
+  const database = openProjectDatabase(cwd, { readonly: false });
+  try {
+    const finishedAt = new Date().toISOString();
+    const cleared = database
+      .prepare(`
+        update job_runs
+        set status = 'failed',
+            finished_at = ?,
+            error_message = 'cleared running job by operator'
+        where job_id = ?
+          and status = 'running'
+      `)
+      .run(finishedAt, jobId).changes;
+
+    return JSON.stringify({ jobId, cleared });
+  } finally {
+    database.close();
+  }
+}
+
+function openProjectDatabase(cwd: string, options: { readonly?: boolean } = {}): Database.Database {
   const projectRoot = findProjectRoot(cwd);
   if (!projectRoot) {
     throw new Error("missing .agent-pipe project; run `agent-pipe init` first");
@@ -101,7 +122,7 @@ function openProjectDatabase(cwd: string): Database.Database {
     throw new Error("missing .agent-pipe/data/local.sqlite; run `agent-pipe init` first");
   }
 
-  const database = new Database(databasePath, { readonly: true });
+  const database = new Database(databasePath, { readonly: options.readonly ?? true });
   ensureSupportedSchemaVersion(database);
   return database;
 }

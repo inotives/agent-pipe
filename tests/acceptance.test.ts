@@ -96,6 +96,9 @@ describe("Phase acceptance", () => {
     expect(readme).toContain(`npm run agent-pipe -- records show 'my-project:coins_list:[\"bitcoin\"]'`);
     expect(readme).toContain("npm run agent-pipe -- jobs list");
     expect(readme).toContain("npm run agent-pipe -- run --job collect_prices");
+    expect(readme).toContain("npm run agent-pipe -- scheduler start");
+    expect(readme).toContain("npm run agent-pipe -- scheduler start --once");
+    expect(readme).toContain("npm run agent-pipe -- runs clear-running --job-id collect_prices");
     expect(readme).toContain("npm run agent-pipe -- source list");
     expect(readme).toContain("npm run agent-pipe -- source run coingecko_coins_list");
     expect(readme).toContain("npm run agent-pipe -- runs list");
@@ -380,11 +383,12 @@ describe("Phase acceptance", () => {
     void ran;
   });
 
-  it("covers Phase 4 jobs list, run --job, records visibility, and run visibility with a local collector", () => {
+  it("covers Phase 5 jobs list, scheduler start --once, records visibility, and run visibility with a local collector", () => {
     const projectDir = makeTempProject("acceptance-jobs");
 
     const initResult = JSON.parse(runCli(projectDir, ["init"])) as { projectId: string };
     writeLocalCollector(projectDir);
+    const cronExpression = currentMinuteCronExpression();
     fs.writeFileSync(
       path.join(projectDir, ".agent-pipe", "schedules.yaml"),
       [
@@ -396,6 +400,9 @@ describe("Phase acceptance", () => {
         "  collect_prices:",
         "    entity: coins_list",
         "    command: node ./collect-prices.mjs",
+        "    schedule:",
+        "      type: cron",
+        `      expression: "${cronExpression}"`,
         "",
       ].join("\n"),
       "utf8",
@@ -409,18 +416,24 @@ describe("Phase acceptance", () => {
     expect(jobsList).toContain("coins_list");
     expect(jobsList).toContain("node ./collect-prices.mjs");
 
-    const runResult = JSON.parse(runCli(projectDir, ["run", "--job", "collect_prices"])) as {
+    const schedulerEvents = runCli(projectDir, ["scheduler", "start", "--once"])
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line)) as Array<Record<string, unknown>>;
+    expect(schedulerEvents.map((event) => event.event)).toEqual([
+      "scheduler_started",
+      "tick_started",
+      "job_due",
+      "job_succeeded",
+      "tick_finished",
+    ]);
+    const succeededEvent = schedulerEvents[3] as {
       jobId: string;
-      entity: string;
-      recordsWritten: number;
       jobRunId: string;
+      recordsWritten: number;
     };
-    expect(runResult).toEqual({
-      jobId: "collect_prices",
-      entity: "coins_list",
-      recordsWritten: 2,
-      jobRunId: runResult.jobRunId,
-    });
+    expect(succeededEvent.jobId).toBe("collect_prices");
+    expect(succeededEvent.recordsWritten).toBe(2);
 
     const recordsList = runCli(projectDir, ["records", "list"]);
     expect(recordsList).toContain('acceptance-jobs:coins_list:["bitcoin"]');
@@ -450,7 +463,7 @@ describe("Phase acceptance", () => {
     expect(runsList).toContain("collect_prices");
     expect(runsList).toContain("succeeded");
 
-    const runShow = JSON.parse(runCli(projectDir, ["runs", "show", runResult.jobRunId])) as {
+    const runShow = JSON.parse(runCli(projectDir, ["runs", "show", succeededEvent.jobRunId])) as {
       id: string;
       job_id: string;
       status: string;
@@ -458,7 +471,7 @@ describe("Phase acceptance", () => {
       metadata: Record<string, unknown> | null;
     };
     expect(runShow).toMatchObject({
-      id: runResult.jobRunId,
+      id: succeededEvent.jobRunId,
       job_id: "collect_prices",
       status: "succeeded",
       records_written: 2,
@@ -485,4 +498,12 @@ function writeLocalCollector(projectDir: string): void {
     ].join("\n"),
     "utf8",
   );
+}
+
+function currentMinuteCronExpression(): string {
+  const now = new Date();
+  if (now.getUTCSeconds() >= 58) {
+    return "* * * * *";
+  }
+  return `${now.getUTCMinutes()} ${now.getUTCHours()} * * *`;
 }

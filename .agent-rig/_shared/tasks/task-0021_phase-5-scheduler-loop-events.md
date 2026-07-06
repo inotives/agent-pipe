@@ -2,7 +2,7 @@
 id: task-0021
 title: "Phase 5: add scheduler loop mode and JSON-line events"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
@@ -11,8 +11,16 @@ priority: normal
 parent: ""
 depends_on:
   - task-0020
-message: ""
+message: "Reviewed: scheduler start now loops with a 60000ms default poll
+  interval, accepts valid overrides, rejects invalid poll intervals with a clear
+  message including non-numeric input, emits JSON-line scheduler events with
+  timestamps, preserves scheduler-only running-job skip behavior and failed run
+  history, and npm test plus npm run typecheck and git diff --check all passed."
 ---
+
+
+
+
 
 # Task
 
@@ -68,3 +76,5 @@ Expected events include:
 - [ ] `npm run typecheck` passes.
 
 ## Notes
+
+- Reviewer finding 2026-07-06: `scheduler start --poll-interval-ms` does not fail clearly for non-numeric input. Repro: in a fresh temp project, `node --import /Users/inotives/workspaces/agent-pipe/node_modules/tsx/dist/loader.mjs /Users/inotives/workspaces/agent-pipe/src/index.ts scheduler start --poll-interval-ms abc` prints `Invalid input: expected number, received NaN`. The Phase 5 contract says invalid poll intervals must fail clearly, and the current `z.coerce.number().int().positive(...)` path in `src/cli.ts` only gives the intended message for some invalid values like `0`. Please normalize all invalid poll-interval inputs, including non-numeric strings, to a clear message such as `poll interval must be a positive integer`, and add coverage for that CLI case in `tests/scheduler.test.ts`.

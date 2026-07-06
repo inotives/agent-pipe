@@ -2,7 +2,7 @@
 id: task-0019
 title: "Phase 5: add schedule parsing and validation"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
@@ -10,8 +10,14 @@ updated_on: 2026-07-06
 priority: normal
 parent: ""
 depends_on: []
-message: ""
+message: "Reviewed: schedule parsing now supports manual and cron jobs with
+  clear invalid-cron failures, backward-compatible missing-schedule/manual
+  behavior is covered, no scheduler CLI behavior was added, and npm test plus
+  npm run typecheck and git diff --check all passed."
 ---
+
+
+
 
 # Task
 

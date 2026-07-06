@@ -1,5 +1,6 @@
 import fs from "node:fs";
 
+import { CronExpressionParser } from "cron-parser";
 import { parse } from "yaml";
 import { z } from "zod";
 
@@ -7,11 +8,43 @@ const entityConfigSchema = z.object({
   idFields: z.array(z.string().min(1)).min(1),
 });
 
-const jobConfigSchema = z.object({
+const manualScheduleSchema = z
+  .object({
+    type: z.literal("manual"),
+  })
+  .strict();
+
+const cronScheduleSchema = z
+  .object({
+    type: z.literal("cron"),
+    expression: z.string().min(1),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    try {
+      CronExpressionParser.parse(value.expression);
+    } catch {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "invalid cron expression",
+        path: ["expression"],
+      });
+    }
+  });
+
+const scheduleConfigSchema = z.discriminatedUnion("type", [manualScheduleSchema, cronScheduleSchema]);
+
+const jobConfigSchema = z
+  .object({
   entity: z.string().min(1),
   command: z.string().min(1),
   timeoutMs: z.number().int().positive().optional(),
-});
+    schedule: scheduleConfigSchema.optional(),
+  })
+  .transform((job) => ({
+    ...job,
+    schedule: job.schedule ?? { type: "manual" as const },
+  }));
 
 export type JobConfig = z.infer<typeof jobConfigSchema>;
 
@@ -40,18 +73,6 @@ export function loadSchedulesConfig(schedulesPath: string): SchedulesConfig {
     if (error instanceof Error && error.message.startsWith("invalid job ")) {
       throw error;
     }
-    if (error instanceof z.ZodError) {
-      const path = error.issues[0]?.path ?? [];
-      const jobId =
-        path[0] === "jobs" && typeof path[1] === "string"
-          ? path[1]
-          : typeof path[0] === "string"
-            ? path[0]
-            : null;
-      if (jobId) {
-        throw new Error(`invalid job "${jobId}"`);
-      }
-    }
     throw new Error("invalid .agent-pipe/schedules.yaml");
   }
 }
@@ -64,5 +85,20 @@ function parseJobs(value: unknown): Record<string, JobConfig> {
     throw new Error("invalid .agent-pipe/schedules.yaml");
   }
 
-  return z.record(z.string(), jobConfigSchema).parse(value ?? {});
+  const jobs = z.record(z.string(), z.unknown()).parse(value ?? {});
+  return Object.fromEntries(
+    Object.entries(jobs).map(([jobId, job]) => {
+      try {
+        return [jobId, jobConfigSchema.parse(job)];
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          const issue = error.issues[0];
+          if (issue?.path.join(".") === "schedule.expression" && issue.message === "invalid cron expression") {
+            throw new Error(`invalid job "${jobId}": invalid cron expression`);
+          }
+        }
+        throw new Error(`invalid job "${jobId}"`);
+      }
+    }),
+  );
 }

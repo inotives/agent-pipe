@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { z } from "zod";
 
+import { runDbInit, runDbStatus } from "./db.js";
 import { runJob } from "./job-run.js";
 import { runJobsList } from "./jobs-list.js";
 import { runInit } from "./init.js";
@@ -17,6 +18,7 @@ const putOptionsSchema = z.object({
     message: "entity must match ^[a-z0-9_-]+$",
   }),
   file: z.string().min(1, "file is required"),
+  database: z.string().min(1).optional(),
 });
 
 type StubPayload = Record<string, unknown>;
@@ -83,12 +85,39 @@ export function buildCli(): Command {
       }
     });
 
+  const db = program.command("db").description("Prepare and inspect configured databases");
+
+  db
+    .command("init")
+    .description("Prepare all configured databases")
+    .action(() => {
+      try {
+        const output = runDbInit(process.cwd());
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "db init failed");
+      }
+    });
+
+  db
+    .command("status")
+    .description("Inspect configured databases")
+    .action(() => {
+      try {
+        const output = runDbStatus(process.cwd());
+        process.stdout.write(`${output}\n`);
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "db status failed");
+      }
+    });
+
   program
     .command("put")
     .description("Ingest one JSON payload file into an entity")
     .requiredOption("--entity <entity>", "entity name")
     .requiredOption("--file <file>", "JSON file path")
-    .action((options: { entity: string; file: string }) => {
+    .option("--database <database>", "configured database name")
+    .action((options: { entity: string; file: string; database?: string }) => {
       const parsed = putOptionsSchema.safeParse(options);
       if (!parsed.success) {
         fail(parsed.error.issues[0]?.message ?? "invalid put options");
@@ -189,12 +218,13 @@ export function buildCli(): Command {
   records
     .command("list")
     .description("List stored records")
+    .option("--database <database>", "configured database name")
     .option("--entity <entity>", "filter by entity")
     .option("--source <source>", "filter by source")
     .option("--limit <limit>", "maximum rows to return")
     .option("--include-deleted", "include soft-deleted rows")
     .option("--json", "print JSON for automation")
-    .action((options: { entity?: string; source?: string; limit?: string; includeDeleted?: boolean; json?: boolean }) => {
+    .action((options: { database?: string; entity?: string; source?: string; limit?: string; includeDeleted?: boolean; json?: boolean }) => {
       try {
         const output = runRecordsList(process.cwd(), options);
         process.stdout.write(`${output}\n`);
@@ -207,9 +237,10 @@ export function buildCli(): Command {
     .command("show")
     .description("Show one stored record")
     .argument("<id>", "stored record id")
-    .action((id: string) => {
+    .option("--database <database>", "configured database name")
+    .action((id: string, options: { database?: string }) => {
       try {
-        const output = runRecordsShow(process.cwd(), id);
+        const output = runRecordsShow(process.cwd(), id, options.database);
         process.stdout.write(`${output}\n`);
       } catch (error) {
         fail(error instanceof Error ? error.message : "records show failed");
@@ -221,11 +252,12 @@ export function buildCli(): Command {
   runs
     .command("list")
     .description("List stored runs")
+    .option("--database <database>", "configured database name")
     .option("--status <status>", "filter by status")
     .option("--job-id <jobId>", "filter by job id")
     .option("--limit <limit>", "maximum rows to return")
     .option("--json", "print JSON for automation")
-    .action((options: { status?: string; jobId?: string; limit?: string; json?: boolean }) => {
+    .action((options: { database?: string; status?: string; jobId?: string; limit?: string; json?: boolean }) => {
       try {
         const output = runRunsList(process.cwd(), options);
         process.stdout.write(`${output}\n`);
@@ -238,9 +270,10 @@ export function buildCli(): Command {
     .command("show")
     .description("Show one stored run")
     .argument("<id>", "stored run id")
-    .action((id: string) => {
+    .option("--database <database>", "configured database name")
+    .action((id: string, options: { database?: string }) => {
       try {
-        const output = runRunsShow(process.cwd(), id);
+        const output = runRunsShow(process.cwd(), id, options.database);
         process.stdout.write(`${output}\n`);
       } catch (error) {
         fail(error instanceof Error ? error.message : "runs show failed");
@@ -250,10 +283,11 @@ export function buildCli(): Command {
   runs
     .command("clear-running")
     .description("Mark running rows for one job as failed")
+    .option("--database <database>", "configured database name")
     .requiredOption("--job-id <jobId>", "configured job id")
-    .action((options: { jobId: string }) => {
+    .action((options: { database?: string; jobId: string }) => {
       try {
-        const output = runRunsClearRunning(process.cwd(), options.jobId);
+        const output = runRunsClearRunning(process.cwd(), options.jobId, options.database);
         process.stdout.write(`${output}\n`);
       } catch (error) {
         fail(error instanceof Error ? error.message : "runs clear-running failed");

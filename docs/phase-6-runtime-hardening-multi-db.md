@@ -133,7 +133,7 @@ npm run agent-pipe -- run --job collect_research
 npm run agent-pipe -- records list --database research
 npm run agent-pipe -- records show <record-id> --database research
 npm run agent-pipe -- runs list --database research
-npm run agent-pipe -- runs show <run-id> --database research
+npm run agent-pipe -- runs show <job-run-id> --database research
 npm run agent-pipe -- runs clear-running --job-id collect_research --database research
 ```
 

@@ -6,20 +6,23 @@ import Database from "better-sqlite3";
 import { parse } from "yaml";
 import { z } from "zod";
 
-import { ensureSupportedSchemaVersion } from "./init.js";
 import { findProjectRoot } from "./project.js";
 import { buildRecordRows, upsertRecords } from "./records.js";
 import {
+  bootstrapProjectDatabase,
+  ensureSupportedSchemaVersion,
   insertJobRun,
   loadEnvLocal,
   loadProjectId,
   readJobRunRecordsWritten,
+  resolveProjectDatabase,
   updateJobRun,
   updateJobRunRecordsWritten,
 } from "./runtime.js";
 
 const scalarValueSchema = z.union([z.string(), z.number(), z.boolean()]);
 const sourceConfigSchema = z.object({
+  database: z.string().min(1).optional(),
   entity: z.string().min(1),
   type: z.string().min(1),
   idFields: z.array(z.string().min(1)).min(1),
@@ -82,19 +85,24 @@ export async function runSource(cwd: string, options: SourceRunOptions): Promise
   const projectConfigPath = path.join(stateDir, "project.yaml");
   const sourcesPath = path.join(stateDir, "sources.yaml");
   const envLocalPath = path.join(stateDir, ".env.local");
-  const databasePath = path.join(stateDir, "data", "local.sqlite");
   if (!fs.existsSync(projectConfigPath)) {
     throw new Error("missing .agent-pipe/project.yaml; run `agent-pipe init` first");
   }
   if (!fs.existsSync(sourcesPath)) {
     throw new Error("missing .agent-pipe/sources.yaml; run `agent-pipe init` first");
   }
-  if (!fs.existsSync(databasePath)) {
-    throw new Error("missing .agent-pipe/data/local.sqlite; run `agent-pipe init` first");
-  }
 
   const projectId = loadProjectId(projectConfigPath);
   const sourceConfig = loadSelectedSource(sourcesPath, options.sourceId);
+  let selectedDatabase;
+  try {
+    selectedDatabase = resolveProjectDatabase(projectConfigPath, sourceConfig.database);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("unknown database ")) {
+      throw new Error(`${error.message} for source "${options.sourceId}"`);
+    }
+    throw error;
+  }
   if (sourceConfig.type !== "api") {
     throw new Error(`unsupported source type "${sourceConfig.type}" for source "${options.sourceId}"`);
   }
@@ -119,7 +127,8 @@ export async function runSource(cwd: string, options: SourceRunOptions): Promise
   const resolvedParams = resolveValues(apiConfig.params ?? {}, envValues, options.sourceId);
   const resolvedQuery = resolveValues(apiConfig.query ?? {}, envValues, options.sourceId);
 
-  const database = new Database(databasePath);
+  bootstrapProjectDatabase(selectedDatabase.absolutePath);
+  const database = new Database(selectedDatabase.absolutePath);
   const jobRunId = randomUUID();
   const startedAt = new Date().toISOString();
   let recordsWritten = 0;

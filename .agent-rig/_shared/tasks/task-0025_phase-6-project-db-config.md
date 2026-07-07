@@ -2,17 +2,21 @@
 id: task-0025
 title: "Phase 6: add project database config parsing"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
 updated_on: 2026-07-06
 priority: normal
 parent: ""
-depends_on:
-message: "Add Phase 6 project-level database config parsing and update init to
-  write the default multi-DB-ready project.yaml shape."
+depends_on: null
+message: "Reviewer accepted: project.yaml now parses Phase 6 database config,
+  init writes the new default local sqlite shape, runtime coverage added, and
+  npm test/typecheck/diff-check passed."
 ---
+
+
+
 
 # Task
 

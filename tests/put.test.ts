@@ -45,8 +45,12 @@ function writeJson(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(value), "utf8");
 }
 
-function readRecords(projectDir: string): Array<Record<string, unknown>> {
-  const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), { readonly: true });
+function writeProjectYaml(projectDir: string, lines: string[]): void {
+  fs.writeFileSync(path.join(projectDir, ".agent-pipe/project.yaml"), `${lines.join("\n")}\n`, "utf8");
+}
+
+function readRecords(projectDir: string, databaseName = "local"): Array<Record<string, unknown>> {
+  const database = new Database(path.join(projectDir, `.agent-pipe/data/${databaseName}.sqlite`), { readonly: true });
   try {
     return database
       .prepare("select id, project_id, entity, local_id, source, payload_json, metadata_json, deleted_at from records order by id")
@@ -153,5 +157,43 @@ describe("agent-pipe put", () => {
 
     expect(readRecords(firstProject)[0]?.id).toBe('first-project:coins_list:["bitcoin"]');
     expect(readRecords(secondProject)[0]?.id).toBe('second-project:coins_list:["bitcoin"]');
+  });
+
+  it("writes to a selected configured database and bootstraps it on first use", () => {
+    const projectDir = makeTempProject("research-put");
+    runCli(projectDir, ["init"]);
+    writeProjectYaml(projectDir, [
+      "projectId: research-put",
+      'projectName: "Research Put"',
+      "defaultDatabase: local",
+      "databases:",
+      "  local:",
+      "    type: sqlite",
+      "    path: data/local.sqlite",
+      "  research:",
+      "    type: sqlite",
+      "    path: data/research.sqlite",
+    ]);
+    fs.rmSync(path.join(projectDir, ".agent-pipe/data/research.sqlite"), { force: true });
+    writeJson(path.join(projectDir, "coins.json"), [{ id: "bitcoin" }]);
+
+    const result = JSON.parse(
+      runCli(projectDir, ["put", "--entity", "coins_list", "--file", "./coins.json", "--database", "research"]).stdout,
+    ) as { projectId: string; entity: string; recordsWritten: number };
+
+    expect(result).toEqual({ projectId: "research-put", entity: "coins_list", recordsWritten: 1 });
+    expect(fs.existsSync(path.join(projectDir, ".agent-pipe/data/research.sqlite"))).toBe(true);
+    expect(readRecords(projectDir, "local")).toHaveLength(0);
+    expect(readRecords(projectDir, "research")[0]?.id).toBe('research-put:coins_list:["bitcoin"]');
+  });
+
+  it("fails clearly for unknown configured databases", () => {
+    const projectDir = makeTempProject("unknown-db");
+    runCli(projectDir, ["init"]);
+    writeJson(path.join(projectDir, "coins.json"), [{ id: "bitcoin" }]);
+
+    expect(() =>
+      runCli(projectDir, ["put", "--entity", "coins_list", "--file", "./coins.json", "--database", "missing"]),
+    ).toThrow(/unknown database "missing"/);
   });
 });

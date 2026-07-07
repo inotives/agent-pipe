@@ -79,6 +79,24 @@ async function withServer(
   }
 }
 
+function writeMultiDatabaseProjectConfig(projectDir: string): void {
+  fs.writeFileSync(
+    path.join(projectDir, ".agent-pipe", "project.yaml"),
+    `projectId: ${path.basename(projectDir)}
+projectName: ${JSON.stringify(path.basename(projectDir))}
+defaultDatabase: local
+databases:
+  local:
+    type: sqlite
+    path: data/local.sqlite
+  research:
+    type: sqlite
+    path: data/research.sqlite
+`,
+    "utf8",
+  );
+}
+
 afterEach(() => {
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
@@ -483,6 +501,196 @@ describe("Phase acceptance", () => {
       },
     });
     expect(runShow.metadata?.durationMs).toEqual(expect.any(Number));
+  });
+
+  it("covers Phase 6 multi-db init, status, writes, and visibility", () => {
+    const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    expect(readme).toContain("npm run agent-pipe -- db status");
+    expect(readme).toContain("npm run agent-pipe -- db init");
+    expect(readme).toContain("npm run agent-pipe -- put --entity coins_list --file ./coins.json --database research");
+    expect(readme).toContain("npm run agent-pipe -- records list --database research");
+    expect(readme).toContain("npm run agent-pipe -- runs list --database research");
+
+    const projectDir = makeTempProject("acceptance-multi-db");
+    const initResult = JSON.parse(runCli(projectDir, ["init"])) as { projectId: string };
+    writeMultiDatabaseProjectConfig(projectDir);
+    fs.rmSync(path.join(projectDir, ".agent-pipe/data/research.sqlite"), { force: true });
+    fs.writeFileSync(
+      path.join(projectDir, "coins.json"),
+      JSON.stringify([{ id: "bitcoin", symbol: "btc", name: "Bitcoin" }]),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "collect-research.mjs"),
+      'console.log(JSON.stringify([{ id: "solana", symbol: "sol", name: "Solana" }]));\n',
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(projectDir, ".agent-pipe", "schedules.yaml"),
+      "entities:\n  coins_list:\n    idFields:\n      - id\njobs: {}\n",
+      "utf8",
+    );
+
+    expect(initResult.projectId).toBe("acceptance-multi-db");
+
+    const statusBefore = JSON.parse(runCli(projectDir, ["db", "status"])) as {
+      databases: Array<{
+        database: string;
+        exists: boolean;
+        schemaStatus: string;
+      }>;
+    };
+    expect(statusBefore.databases).toHaveLength(2);
+    expect(statusBefore.databases[0]).toMatchObject({
+      database: "local",
+      exists: true,
+      schemaStatus: "ok",
+    });
+    expect(statusBefore.databases[1]).toMatchObject({
+      database: "research",
+      exists: false,
+      schemaStatus: "missing",
+    });
+
+    const initDatabases = JSON.parse(runCli(projectDir, ["db", "init"])) as {
+      databases: Array<{
+        database: string;
+        exists: boolean;
+        schemaStatus: string;
+        tables: Record<string, boolean>;
+        indexes: Record<string, boolean>;
+      }>;
+    };
+    expect(initDatabases.databases.map((row) => row.database)).toEqual(["local", "research"]);
+    for (const row of initDatabases.databases) {
+      expect(row.exists).toBe(true);
+      expect(row.schemaStatus).toBe("ok");
+      expect(Object.values(row.tables).every(Boolean)).toBe(true);
+      expect(Object.values(row.indexes).every(Boolean)).toBe(true);
+    }
+
+    const statusAfter = JSON.parse(runCli(projectDir, ["db", "status"])) as typeof initDatabases;
+    for (const row of statusAfter.databases) {
+      expect(row.exists).toBe(true);
+      expect(row.schemaStatus).toBe("ok");
+    }
+
+    const localPut = JSON.parse(
+      runCli(projectDir, ["put", "--entity", "coins_list", "--file", "./coins.json"]),
+    ) as { recordsWritten: number };
+    fs.writeFileSync(
+      path.join(projectDir, ".agent-pipe", "schedules.yaml"),
+      [
+        "entities:",
+        "  coins_list:",
+        "    idFields:",
+        "      - id",
+        "jobs:",
+        "  collect_research:",
+        "    database: research",
+        "    entity: coins_list",
+        "    command: node ./collect-research.mjs",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const researchRun = JSON.parse(runCli(projectDir, ["run", "--job", "collect_research"])) as {
+      jobId: string;
+      recordsWritten: number;
+      jobRunId: string;
+    };
+    expect(localPut.recordsWritten).toBe(1);
+    expect(researchRun).toMatchObject({
+      jobId: "collect_research",
+      recordsWritten: 1,
+      jobRunId: expect.any(String),
+    });
+
+    const localRecords = runCli(projectDir, ["records", "list"]);
+    expect(localRecords).toContain('acceptance-multi-db:coins_list:["bitcoin"]');
+    expect(localRecords).not.toContain('acceptance-multi-db:coins_list:["solana"]');
+
+    const researchRecords = runCli(projectDir, ["records", "list", "--database", "research"]);
+    expect(researchRecords).toContain('acceptance-multi-db:coins_list:["solana"]');
+    expect(researchRecords).not.toContain('acceptance-multi-db:coins_list:["bitcoin"]');
+
+    const researchRecordShow = JSON.parse(
+      runCli(projectDir, ["records", "show", 'acceptance-multi-db:coins_list:["solana"]', "--database", "research"]),
+    ) as {
+      id: string;
+      source: string | null;
+      payload: Record<string, unknown>;
+      metadata: Record<string, unknown> | null;
+    };
+    expect(researchRecordShow).toMatchObject({
+      id: 'acceptance-multi-db:coins_list:["solana"]',
+      source: "collect_research",
+      payload: { id: "solana", symbol: "sol", name: "Solana" },
+      metadata: {
+        jobId: "collect_research",
+        command: "node ./collect-research.mjs",
+        ingestionType: "job",
+      },
+    });
+
+    const localRuns = runCli(projectDir, ["runs", "list"]);
+    expect(localRuns).toContain("JOB_ID");
+    expect(localRuns).not.toContain("collect_research");
+
+    const researchRuns = runCli(projectDir, ["runs", "list", "--database", "research"]);
+    expect(researchRuns).toContain("collect_research");
+    expect(researchRuns).toContain("succeeded");
+
+    const researchRunShow = JSON.parse(
+      runCli(projectDir, ["runs", "show", researchRun.jobRunId, "--database", "research"]),
+    ) as {
+      id: string;
+      job_id: string;
+      status: string;
+      records_written: number;
+      metadata: Record<string, unknown> | null;
+    };
+    expect(researchRunShow).toMatchObject({
+      id: researchRun.jobRunId,
+      job_id: "collect_research",
+      status: "succeeded",
+      records_written: 1,
+      metadata: {
+        jobId: "collect_research",
+        command: "node ./collect-research.mjs",
+        exitCode: 0,
+        timeoutMs: 60000,
+      },
+    });
+    expect(researchRunShow.metadata?.durationMs).toEqual(expect.any(Number));
+
+    const localDatabase = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), {
+      readonly: true,
+    });
+    try {
+      const localRecordsCount = localDatabase.prepare("select count(*) as count from records").get() as { count: number };
+      const localRunsCount = localDatabase.prepare("select count(*) as count from job_runs").get() as { count: number };
+      expect(localRecordsCount.count).toBe(1);
+      expect(localRunsCount.count).toBe(0);
+    } finally {
+      localDatabase.close();
+    }
+
+    const researchDatabase = new Database(path.join(projectDir, ".agent-pipe/data/research.sqlite"), {
+      readonly: true,
+    });
+    try {
+      const researchRecordsCount = researchDatabase.prepare("select count(*) as count from records").get() as {
+        count: number;
+      };
+      const researchRunsCount = researchDatabase.prepare("select count(*) as count from job_runs").get() as {
+        count: number;
+      };
+      expect(researchRecordsCount.count).toBe(1);
+      expect(researchRunsCount.count).toBe(1);
+    } finally {
+      researchDatabase.close();
+    }
   });
 });
 

@@ -12,6 +12,14 @@ const tempDirs: string[] = [];
 const repoRoot = path.resolve(__dirname, "..");
 const tsxLoader = path.join(repoRoot, "node_modules/tsx/dist/loader.mjs");
 const cliEntry = path.join(repoRoot, "src/index.ts");
+const expectedProjectYaml = `projectId: agent-pipe
+projectName: "Agent Pipe"
+defaultDatabase: local
+databases:
+  local:
+    type: sqlite
+    path: data/local.sqlite
+`;
 const expectedSourcesYaml = `sources:
   coingecko_coins_list:
     entity: coins_list
@@ -123,7 +131,7 @@ describe("buildCli", () => {
     const program = buildCli();
     const names = program.commands.map((command) => command.name());
 
-    expect(names).toEqual(["init", "put", "source", "jobs", "run", "scheduler", "records", "runs"]);
+    expect(names).toEqual(["init", "db", "put", "source", "jobs", "run", "scheduler", "records", "runs"]);
   });
 });
 
@@ -146,6 +154,9 @@ describe("agent-pipe init", () => {
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/sources.yaml"))).toBe(true);
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/.env.local"))).toBe(true);
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/logs"))).toBe(true);
+    expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/project.yaml"), "utf8")).toBe(
+      expectedProjectYaml,
+    );
     expect(fs.readFileSync(path.join(projectDir, ".agent-pipe/sources.yaml"), "utf8")).toBe(
       expectedSourcesYaml,
     );
@@ -234,6 +245,37 @@ describe("agent-pipe init", () => {
     expect(fs.existsSync(path.join(projectDir, ".agent-pipe/data/local.sqlite"))).toBe(true);
   });
 
+  it("reports the configured default database on rerun", () => {
+    const projectDir = makeTempProject("custom-default-db");
+    fs.mkdirSync(path.join(projectDir, ".agent-pipe"), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectDir, ".agent-pipe/project.yaml"),
+      [
+        "projectId: kept",
+        'projectName: "Keep Me"',
+        "defaultDatabase: research",
+        "databases:",
+        "  local:",
+        "    type: sqlite",
+        "    path: data/local.sqlite",
+        "  research:",
+        "    type: sqlite",
+        "    path: data/research.sqlite",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const { stdout } = runCli(projectDir, ["init"]);
+    const result = JSON.parse(stdout) as {
+      paths: Record<string, string>;
+    };
+
+    expect(result.paths.database).toBe(".agent-pipe/data/research.sqlite");
+    expect(fs.existsSync(path.join(projectDir, ".agent-pipe/data/research.sqlite"))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, ".agent-pipe/data/local.sqlite"))).toBe(false);
+  });
+
   it("fails clearly on unsupported schema versions", () => {
     const projectDir = makeTempProject("schema-check");
     fs.mkdirSync(path.join(projectDir, ".agent-pipe/data"), { recursive: true });
@@ -241,6 +283,30 @@ describe("agent-pipe init", () => {
     database.exec(`
       create table schema_migrations (version integer primary key);
       insert into schema_migrations (version) values (2);
+      create table records (
+        id text primary key,
+        project_id text not null,
+        entity text not null,
+        local_id text not null,
+        source text,
+        captured_at text,
+        payload_json text not null,
+        metadata_json text,
+        created_at text not null,
+        updated_at text not null,
+        deleted_at text
+      );
+      create table job_runs (
+        id text primary key,
+        job_id text not null,
+        entity text,
+        status text not null,
+        started_at text not null,
+        finished_at text,
+        records_written integer not null default 0,
+        error_message text,
+        metadata_json text
+      );
     `);
     database.close();
 

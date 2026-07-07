@@ -2,7 +2,7 @@
 
 Local datastore, API ingestion, job runner, and scheduler for agent workflows inside a project repository.
 
-`agent-pipe` stores project-local records in `.agent-pipe/data/local.sqlite`, tracks source and job runs, and exposes small CLI commands for local inspection and scheduling.
+`agent-pipe` stores project-local records in SQLite files under `.agent-pipe/data/`, tracks source and job runs beside the records they write, and exposes small CLI commands for local inspection and scheduling.
 
 ## Quickstart
 
@@ -38,6 +38,7 @@ Write records from a JSON file:
 
 ```bash
 npm run agent-pipe -- put --entity coins_list --file ./coins.json
+npm run agent-pipe -- put --entity coins_list --file ./coins.json --database research
 ```
 
 Example `coins.json`:
@@ -91,7 +92,7 @@ npm run agent-pipe -- records list --source coingecko_coins_list
 npm run agent-pipe -- records list --limit 20
 npm run agent-pipe -- records list --include-deleted
 npm run agent-pipe -- records list --json
-npm run agent-pipe -- records show 'agent-pipe:coins_list:["bitcoin"]'
+npm run agent-pipe -- records show 'my-project:coins_list:["bitcoin"]'
 ```
 
 Inspect source and job run history:
@@ -102,7 +103,7 @@ npm run agent-pipe -- runs list --status failed
 npm run agent-pipe -- runs list --job-id coingecko_coins_list
 npm run agent-pipe -- runs list --limit 20
 npm run agent-pipe -- runs list --json
-npm run agent-pipe -- runs show '<run-id>'
+npm run agent-pipe -- runs show '<job-run-id>'
 ```
 
 ## Manual Jobs
@@ -130,7 +131,7 @@ npm run agent-pipe -- jobs list --json
 npm run agent-pipe -- run --job collect_prices
 ```
 
-Job commands run from the project root, load `.agent-pipe/.env.local`, must print a JSON object or array to stdout, and write records through the same local store. Same-job running conflicts create a skipped run row.
+Job commands run from the project root, load `.agent-pipe/.env.local`, must print a JSON object or array to stdout, and write records plus run history into the selected configured database. Same-job running conflicts create a skipped run row.
 
 ## Scheduler
 
@@ -162,6 +163,7 @@ npm run agent-pipe -- scheduler start --poll-interval-ms 60000
 ```
 
 Scheduler output is newline-delimited JSON events. It does not catch up missed runs and does not retry failed jobs.
+Job-level scheduler events include the database name, and jobs in different databases may run in the same tick while same-database jobs stay sequential.
 
 Clear stale running rows for one job:
 
@@ -169,15 +171,51 @@ Clear stale running rows for one job:
 npm run agent-pipe -- runs clear-running --job-id collect_prices
 ```
 
-## Phase 6 Planned Multi-DB Workflow
+## Multi-DB Workflow
 
-Phase 6 will add multiple SQLite database support. Planned flow:
+`agent-pipe` now supports multiple configured SQLite databases under `.agent-pipe/data/`.
+Configure them in `.agent-pipe/project.yaml`:
+
+```yaml
+projectId: my-project
+projectName: "My Project"
+defaultDatabase: local
+databases:
+  local:
+    type: sqlite
+    path: data/local.sqlite
+  research:
+    type: sqlite
+    path: data/research.sqlite
+```
+
+Inspect and prepare them with:
 
 ```bash
-# Add another database in .agent-pipe/project.yaml.
 npm run agent-pipe -- db status
 npm run agent-pipe -- db init
 npm run agent-pipe -- db status
 ```
 
-`agent-pipe init` is for creating the project scaffold. After a project already exists, add SQLite databases by editing `.agent-pipe/project.yaml`, then run `db init` to prepare all configured database files. Runtime commands may also prepare a selected missing database on first use.
+`agent-pipe init` is for creating the project scaffold. After a project already exists, add SQLite databases by editing `.agent-pipe/project.yaml`, then run `db init` to prepare all configured database files. `db status` reports configured path, absolute path, existence, schema health, table health, and built-in index health for every configured database. Runtime commands may also prepare a selected missing database on first use.
+
+Route writes and visibility to a selected database:
+
+```yaml
+jobs:
+  collect_research:
+    database: research
+    entity: coins_list
+    command: npm run collect:research
+```
+
+```bash
+npm run agent-pipe -- put --entity coins_list --file ./coins.json --database research
+npm run agent-pipe -- records list --database research
+npm run agent-pipe -- records show 'my-project:coins_list:["bitcoin"]' --database research
+npm run agent-pipe -- runs list --database research
+npm run agent-pipe -- runs show '<job-run-id>' --database research
+npm run agent-pipe -- runs clear-running --job-id collect_research --database research
+```
+
+Sources and jobs default to `defaultDatabase` when `database` is omitted.

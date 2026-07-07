@@ -2,18 +2,24 @@
 id: task-0028
 title: "Phase 6: route put, source run, and run job through databases"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
-updated_on: 2026-07-06
+updated_on: 2026-07-07
 priority: normal
 parent: ""
 depends_on:
   - task-0027
-message: "Wire record-writing commands through the configured database resolver,
-  including source/job database fields and put --database."
+message: "Reviewer accepted: put, source run, and run --job now resolve
+  configured databases, bootstrap selected missing databases on first use, store
+  records/run history in the selected database, default correctly to
+  defaultDatabase, and fail clearly on unknown database names. npm
+  test/typecheck/diff-check passed."
 ---
+
+
+
 
 # Task
 

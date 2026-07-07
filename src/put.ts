@@ -4,16 +4,12 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { z } from "zod";
 
-import { ensureSupportedSchemaVersion } from "./init.js";
-import { findProjectRoot, validateProjectId } from "./project.js";
+import { findProjectRoot } from "./project.js";
 import { buildRecordRows, upsertRecords } from "./records.js";
+import { bootstrapProjectDatabase, ensureSupportedSchemaVersion, loadProjectId, resolveProjectDatabase } from "./runtime.js";
 
 const inputRecordSchema = z.record(z.string(), z.unknown());
 const inputPayloadSchema = z.union([inputRecordSchema, z.array(inputRecordSchema)]);
-
-const projectConfigSchema = z.object({
-  projectId: z.string().min(1),
-});
 
 const entityConfigSchema = z.object({
   idFields: z.array(z.string().min(1)).min(1),
@@ -22,6 +18,7 @@ const entityConfigSchema = z.object({
 type PutOptions = {
   entity: string;
   file: string;
+  database?: string;
 };
 
 type PutResult = {
@@ -39,7 +36,6 @@ export function runPut(cwd: string, options: PutOptions): PutResult {
   const stateDir = path.join(projectRoot, ".agent-pipe");
   const projectConfigPath = path.join(stateDir, "project.yaml");
   const schedulesPath = path.join(stateDir, "schedules.yaml");
-  const databasePath = path.join(stateDir, "data", "local.sqlite");
   const inputPath = path.resolve(cwd, options.file);
 
   if (options.file === "-") {
@@ -51,14 +47,20 @@ export function runPut(cwd: string, options: PutOptions): PutResult {
   if (!fs.existsSync(schedulesPath)) {
     throw new Error("missing .agent-pipe/schedules.yaml; run `agent-pipe init` first");
   }
-  if (!fs.existsSync(databasePath)) {
-    throw new Error("missing .agent-pipe/data/local.sqlite; run `agent-pipe init` first");
-  }
   if (!fs.existsSync(inputPath)) {
     throw new Error(`input file not found: ${options.file}`);
   }
 
   const projectId = loadProjectId(projectConfigPath);
+  let selectedDatabase;
+  try {
+    selectedDatabase = resolveProjectDatabase(projectConfigPath, options.database);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("unknown database ")) {
+      throw error;
+    }
+    throw error;
+  }
   const schedules = loadSchedules(schedulesPath);
   const entityConfig = schedules[options.entity];
   if (!entityConfig) {
@@ -78,7 +80,8 @@ export function runPut(cwd: string, options: PutOptions): PutResult {
     metadataForPayload: () => ({ inputFile: options.file }),
   });
 
-  const database = new Database(databasePath);
+  bootstrapProjectDatabase(selectedDatabase.absolutePath);
+  const database = new Database(selectedDatabase.absolutePath);
   try {
     ensureSupportedSchemaVersion(database);
     upsertRecords(database, rows.values());
@@ -92,16 +95,6 @@ export function runPut(cwd: string, options: PutOptions): PutResult {
     recordsWritten: payloads.length,
   };
 }
-
-function loadProjectId(projectConfigPath: string): string {
-  const projectConfig = parseSimpleYamlObject(fs.readFileSync(projectConfigPath, "utf8"));
-  const parsed = projectConfigSchema.safeParse(projectConfig);
-  if (!parsed.success) {
-    throw new Error("invalid .agent-pipe/project.yaml");
-  }
-  return validateProjectId(parsed.data.projectId);
-}
-
 function loadSchedules(schedulesPath: string): Record<string, z.infer<typeof entityConfigSchema>> {
   const lines = fs.readFileSync(schedulesPath, "utf8").split(/\r?\n/);
   const entities: Record<string, { idFields: string[] }> = {};
@@ -143,31 +136,6 @@ function loadSchedules(schedulesPath: string): Record<string, z.infer<typeof ent
     throw new Error("invalid .agent-pipe/schedules.yaml");
   }
   return parsed.data;
-}
-
-function parseSimpleYamlObject(content: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.+)$/);
-    if (!match) {
-      continue;
-    }
-    const [, key, rawValue] = match;
-    result[key] = parseYamlScalar(rawValue);
-  }
-  return result;
-}
-
-function parseYamlScalar(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
-    return JSON.parse(trimmed) as string;
-  }
-  return trimmed;
 }
 
 function loadInputPayloads(inputPath: string): Array<Record<string, unknown>> {

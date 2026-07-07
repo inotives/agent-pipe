@@ -36,9 +36,10 @@ const scheduleConfigSchema = z.discriminatedUnion("type", [manualScheduleSchema,
 
 const jobConfigSchema = z
   .object({
-  entity: z.string().min(1),
-  command: z.string().min(1),
-  timeoutMs: z.number().int().positive().optional(),
+    database: z.string().min(1).optional(),
+    entity: z.string().min(1),
+    command: z.string().min(1),
+    timeoutMs: z.number().int().positive().optional(),
     schedule: scheduleConfigSchema.optional(),
   })
   .transform((job) => ({

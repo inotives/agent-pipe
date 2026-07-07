@@ -2,18 +2,26 @@
 id: task-0027
 title: "Phase 6: add db init and db status"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
-updated_on: 2026-07-06
+updated_on: 2026-07-07
 priority: normal
 parent: ""
 depends_on:
   - task-0026
-message: "Add operator-facing database maintenance commands for preparing and
-  inspecting all configured SQLite databases."
+message: "Reviewer accepted: db init and db status are wired into the CLI,
+  bootstrap and status cover all configured databases with schema/table/index
+  health, README now documents the workflow as current behavior, and npm
+  test/typecheck/diff-check passed."
 ---
+
+
+
+
+
+
 
 # Task
 
@@ -59,3 +67,7 @@ Keep output JSON-first for automation. A pretty table can wait.
 - [ ] `git diff --check` passes.
 
 ## Notes
+- Reviewer return:
+  `README.md:172-183` still frames the new `db status` / `db init` workflow as "Phase 6 Planned Multi-DB Workflow" and says "Phase 6 will add multiple SQLite database support. Planned flow:" even though this task ships those commands now.
+  That leaves the README materially stale for operators: the commands exist, but the docs still present them as future work.
+  Update this section to describe the commands as current behavior, not planned behavior.

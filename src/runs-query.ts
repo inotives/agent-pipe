@@ -1,12 +1,12 @@
-import fs from "node:fs";
 import path from "node:path";
 
 import Database from "better-sqlite3";
 
-import { ensureSupportedSchemaVersion } from "./init.js";
 import { findProjectRoot } from "./project.js";
+import { ensureSupportedSchemaVersion, resolveProjectDatabase } from "./runtime.js";
 
 type RunsListOptions = {
+  database?: string;
   status?: string;
   jobId?: string;
   limit?: string | number;
@@ -30,7 +30,7 @@ type RunDetailsRow = RunSummary & {
 
 export function runRunsList(cwd: string, options: RunsListOptions): string {
   const limit = parseLimit(options.limit);
-  const database = openProjectDatabase(cwd);
+  const database = openProjectDatabase(cwd, options.database);
   try {
     const rows = listRuns(database, {
       status: options.status,
@@ -46,8 +46,8 @@ export function runRunsList(cwd: string, options: RunsListOptions): string {
   }
 }
 
-export function runRunsShow(cwd: string, id: string): string {
-  const database = openProjectDatabase(cwd);
+export function runRunsShow(cwd: string, id: string, databaseName?: string): string {
+  const database = openProjectDatabase(cwd, databaseName);
   try {
     const row = database
       .prepare(`
@@ -90,8 +90,8 @@ export function runRunsShow(cwd: string, id: string): string {
   }
 }
 
-export function runRunsClearRunning(cwd: string, jobId: string): string {
-  const database = openProjectDatabase(cwd, { readonly: false });
+export function runRunsClearRunning(cwd: string, jobId: string, databaseName?: string): string {
+  const database = openProjectDatabase(cwd, databaseName, { readonly: false });
   try {
     const finishedAt = new Date().toISOString();
     const cleared = database
@@ -111,16 +111,14 @@ export function runRunsClearRunning(cwd: string, jobId: string): string {
   }
 }
 
-function openProjectDatabase(cwd: string, options: { readonly?: boolean } = {}): Database.Database {
+function openProjectDatabase(cwd: string, databaseName?: string, options: { readonly?: boolean } = {}): Database.Database {
   const projectRoot = findProjectRoot(cwd);
   if (!projectRoot) {
     throw new Error("missing .agent-pipe project; run `agent-pipe init` first");
   }
 
-  const databasePath = path.join(projectRoot, ".agent-pipe", "data", "local.sqlite");
-  if (!fs.existsSync(databasePath)) {
-    throw new Error("missing .agent-pipe/data/local.sqlite; run `agent-pipe init` first");
-  }
+  const projectConfigPath = path.join(projectRoot, ".agent-pipe", "project.yaml");
+  const databasePath = resolveProjectDatabase(projectConfigPath, databaseName).absolutePath;
 
   const database = new Database(databasePath, { readonly: options.readonly ?? true });
   ensureSupportedSchemaVersion(database);

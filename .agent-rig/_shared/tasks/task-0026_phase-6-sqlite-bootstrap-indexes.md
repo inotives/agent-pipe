@@ -2,18 +2,27 @@
 id: task-0026
 title: "Phase 6: centralize SQLite bootstrap and built-in indexes"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
-updated_on: 2026-07-06
+updated_on: 2026-07-07
 priority: normal
 parent: ""
 depends_on:
   - task-0025
-message: "Create the shared SQLite database resolver/bootstrap path, add
-  built-in indexes, and handle incompatible pre-release database files."
+message: "Reviewer accepted: shared SQLite bootstrap/resolution path creates
+  managed schema plus built-in indexes, replaces incompatible pre-release files,
+  preserves unsupported-schema rejection, and the init rerun path now reports
+  the bootstrapped configured database correctly. npm test/typecheck/diff-check
+  passed."
 ---
+
+
+
+
+
+
 
 # Task
 
@@ -57,3 +66,7 @@ This task should remove hardcoded assumptions from shared runtime helpers where 
 - [ ] `git diff --check` passes.
 
 ## Notes
+- Reviewer return:
+  `src/init.ts:130-140` now bootstraps the configured default database on rerun, but `init` still reports `.agent-pipe/data/local.sqlite` in its JSON result unconditionally. Repro:
+  create an existing `.agent-pipe/project.yaml` with `defaultDatabase: research` and `databases.research.path: data/research.sqlite`, then run `agent-pipe init` again. The command succeeds, creates `data/research.sqlite`, leaves `data/local.sqlite` missing, and still returns `"database": ".agent-pipe/data/local.sqlite"`.
+  This is now a user-visible lie in `init` output and a rerun behavior regression introduced by the shared bootstrap switch. Fix by keeping the bootstrapped path and reported path aligned on rerun.

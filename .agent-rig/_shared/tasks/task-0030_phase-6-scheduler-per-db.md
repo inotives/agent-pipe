@@ -2,18 +2,23 @@
 id: task-0030
 title: "Phase 6: update scheduler for per-database execution"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
-updated_on: 2026-07-06
+updated_on: 2026-07-07
 priority: normal
 parent: ""
 depends_on:
   - task-0029
-message: "Update scheduler execution so jobs targeting different databases may
-  run concurrently while same-database due jobs run sequentially in one tick."
+message: "Reviewer accepted: scheduler now groups due jobs per database, runs
+  database groups concurrently while keeping same-database jobs sequential
+  within a tick, emits database names on job-level events, and preserves
+  no-catch-up/no-retry behavior. npm test/typecheck/diff-check passed."
 ---
+
+
+
 
 # Task
 

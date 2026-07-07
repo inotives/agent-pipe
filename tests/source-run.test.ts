@@ -75,8 +75,12 @@ function writeSources(projectDir: string, content: string): void {
   fs.writeFileSync(path.join(projectDir, ".agent-pipe", "sources.yaml"), content, "utf8");
 }
 
-function readRecords(projectDir: string): Array<Record<string, unknown>> {
-  const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), { readonly: true });
+function writeProjectYaml(projectDir: string, lines: string[]): void {
+  fs.writeFileSync(path.join(projectDir, ".agent-pipe/project.yaml"), `${lines.join("\n")}\n`, "utf8");
+}
+
+function readRecords(projectDir: string, databaseName = "local"): Array<Record<string, unknown>> {
+  const database = new Database(path.join(projectDir, `.agent-pipe/data/${databaseName}.sqlite`), { readonly: true });
   try {
     return database
       .prepare("select id, entity, source, payload_json, metadata_json from records order by id")
@@ -86,8 +90,8 @@ function readRecords(projectDir: string): Array<Record<string, unknown>> {
   }
 }
 
-function readJobRuns(projectDir: string): Array<Record<string, unknown>> {
-  const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), { readonly: true });
+function readJobRuns(projectDir: string, databaseName = "local"): Array<Record<string, unknown>> {
+  const database = new Database(path.join(projectDir, `.agent-pipe/data/${databaseName}.sqlite`), { readonly: true });
   try {
     return database
       .prepare(
@@ -481,5 +485,88 @@ describe("agent-pipe source run", () => {
     expect(result.stderr).toContain(
       'missing env placeholder "AGENT_PIPE_TEST_MISSING_PLACEHOLDER" for source "needs_env"',
     );
+  });
+
+  it("writes source records and run history to the configured source database", async () => {
+    const ran = await withServer((req, res) => {
+      if (req.url?.startsWith("/api/v3/coins/list")) {
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify([{ id: "bitcoin" }]));
+        return;
+      }
+      res.statusCode = 404;
+      res.end();
+    }, async (baseUrl) => {
+      const projectDir = makeTempProject("source-run-research");
+      await runCli(projectDir, ["init"]);
+      writeProjectYaml(projectDir, [
+        "projectId: source-run-research",
+        'projectName: "Source Run Research"',
+        "defaultDatabase: local",
+        "databases:",
+        "  local:",
+        "    type: sqlite",
+        "    path: data/local.sqlite",
+        "  research:",
+        "    type: sqlite",
+        "    path: data/research.sqlite",
+      ]);
+      fs.rmSync(path.join(projectDir, ".agent-pipe/data/research.sqlite"), { force: true });
+      writeSources(
+        projectDir,
+        `sources:
+  smoke_source:
+    database: research
+    entity: coins_list
+    type: api
+    idFields:
+      - id
+    api:
+      baseUrl: ${baseUrl}/api/v3
+      endpoint: /coins/list
+      method: GET
+      payloadPath: $
+      pagination:
+        type: none
+`,
+      );
+
+      const result = await runCli(projectDir, ["source", "run", "smoke_source"]);
+      expect(result.stderr).toBe("");
+      expect(fs.existsSync(path.join(projectDir, ".agent-pipe/data/research.sqlite"))).toBe(true);
+      expect(readRecords(projectDir, "local")).toHaveLength(0);
+      expect(readRecords(projectDir, "research")).toHaveLength(1);
+      expect(readJobRuns(projectDir, "local")).toHaveLength(0);
+      expect(readJobRuns(projectDir, "research")[0]?.job_id).toBe("smoke_source");
+    });
+    if (!ran) {
+      return;
+    }
+  });
+
+  it("fails clearly for unknown configured source databases", async () => {
+    const projectDir = makeTempProject("source-run-unknown-db");
+    await runCli(projectDir, ["init"]);
+    writeSources(
+      projectDir,
+      `sources:
+  smoke_source:
+    database: missing
+    entity: coins_list
+    type: api
+    idFields:
+      - id
+    api:
+      baseUrl: http://example.test
+      endpoint: /coins/list
+      method: GET
+      payloadPath: $
+      pagination:
+        type: none
+`,
+    );
+
+    const result = await runCli(projectDir, ["source", "run", "smoke_source"]);
+    expect(result.stderr).toContain('unknown database "missing" for source "smoke_source"');
   });
 });

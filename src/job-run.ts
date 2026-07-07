@@ -6,14 +6,16 @@ import { promisify } from "node:util";
 
 import Database from "better-sqlite3";
 
-import { ensureSupportedSchemaVersion } from "./init.js";
 import { findProjectRoot } from "./project.js";
 import { buildRecordRows, upsertRecords } from "./records.js";
 import {
+  bootstrapProjectDatabase,
+  ensureSupportedSchemaVersion,
   insertJobRun,
   loadEnvLocal,
   loadProjectId,
   readJobRunRecordsWritten,
+  resolveProjectDatabase,
   updateJobRun,
   updateJobRunRecordsWritten,
 } from "./runtime.js";
@@ -42,24 +44,22 @@ export async function runJob(cwd: string, options: JobRunOptions): Promise<JobRu
   const projectConfigPath = path.join(stateDir, "project.yaml");
   const schedulesPath = path.join(stateDir, "schedules.yaml");
   const envLocalPath = path.join(stateDir, ".env.local");
-  const databasePath = path.join(stateDir, "data", "local.sqlite");
   if (!fs.existsSync(projectConfigPath)) {
     throw new Error("missing .agent-pipe/project.yaml; run `agent-pipe init` first");
   }
   if (!fs.existsSync(schedulesPath)) {
     throw new Error("missing .agent-pipe/schedules.yaml; run `agent-pipe init` first");
   }
-  if (!fs.existsSync(databasePath)) {
-    throw new Error("missing .agent-pipe/data/local.sqlite; run `agent-pipe init` first");
-  }
-
-  const database = new Database(databasePath);
   const jobRunId = randomUUID();
   const startedAt = new Date().toISOString();
   let recordsWritten = 0;
+  let database: Database.Database | null = null;
   try {
-    ensureSupportedSchemaVersion(database);
     const projectId = loadProjectId(projectConfigPath);
+    const defaultDatabase = resolveProjectDatabase(projectConfigPath);
+    bootstrapProjectDatabase(defaultDatabase.absolutePath);
+    database = new Database(defaultDatabase.absolutePath);
+    ensureSupportedSchemaVersion(database);
     let schedules;
     try {
       schedules = loadSchedulesConfig(schedulesPath);
@@ -89,6 +89,31 @@ export async function runJob(cwd: string, options: JobRunOptions): Promise<JobRu
         errorMessage,
       });
       throw new Error(errorMessage);
+    }
+    let selectedDatabase;
+    try {
+      selectedDatabase = resolveProjectDatabase(projectConfigPath, job.database);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("unknown database ")) {
+        const errorMessage = `${error.message} for job "${options.jobId}"`;
+        insertFailedJobRun(database, {
+          id: jobRunId,
+          jobId: options.jobId,
+          entity: job.entity,
+          startedAt,
+          command: job.command,
+          timeoutMs: job.timeoutMs ?? 60000,
+          errorMessage,
+        });
+        throw new Error(errorMessage);
+      }
+      throw error;
+    }
+    if (selectedDatabase.absolutePath !== defaultDatabase.absolutePath) {
+      database.close();
+      bootstrapProjectDatabase(selectedDatabase.absolutePath);
+      database = new Database(selectedDatabase.absolutePath);
+      ensureSupportedSchemaVersion(database);
     }
     const timeoutMs = job.timeoutMs ?? 60000;
     const childEnv = {
@@ -185,7 +210,7 @@ export async function runJob(cwd: string, options: JobRunOptions): Promise<JobRu
       throw new Error(readErrorMessage(error, options.jobId));
     }
   } finally {
-    database.close();
+    database?.close();
   }
 }
 

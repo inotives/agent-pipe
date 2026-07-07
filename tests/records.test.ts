@@ -41,8 +41,12 @@ function runCli(cwd: string, args: string[]): { stdout: string; stderr: string }
   }
 }
 
-function withDatabase(projectDir: string, fn: (database: Database.Database) => void): void {
-  const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"));
+function writeProjectYaml(projectDir: string, lines: string[]): void {
+  fs.writeFileSync(path.join(projectDir, ".agent-pipe/project.yaml"), `${lines.join("\n")}\n`, "utf8");
+}
+
+function withDatabase(projectDir: string, fn: (database: Database.Database) => void, databaseName = "local"): void {
+  const database = new Database(path.join(projectDir, `.agent-pipe/data/${databaseName}.sqlite`));
   try {
     fn(database);
   } finally {
@@ -61,6 +65,7 @@ function insertRecord(
     deletedAt?: string | null;
     payload?: Record<string, unknown>;
     metadata?: Record<string, unknown> | null;
+    databaseName?: string;
   },
 ): void {
   withDatabase(projectDir, (database) => {
@@ -87,7 +92,7 @@ function insertRecord(
         updated_at: input.updatedAt,
         deleted_at: input.deletedAt ?? null,
       });
-  });
+  }, input.databaseName);
 }
 
 function seedRecords(projectDir: string): void {
@@ -243,5 +248,64 @@ describe("agent-pipe records", () => {
 
     expect(() => runCli(projectDir, ["records", "list", "--limit", "0"])).toThrow(/--limit must be a positive integer/);
     expect(() => runCli(projectDir, ["records", "show", "missing-id"])).toThrow(/unknown record "missing-id"/);
+  });
+
+  it("reads from a selected configured database and defaults to local", () => {
+    const projectDir = makeTempProject("records-database");
+    runCli(projectDir, ["init"]);
+    runCli(projectDir, ["db", "init"]);
+    writeProjectYaml(projectDir, [
+      "projectId: records-project",
+      'projectName: "Records Project"',
+      "defaultDatabase: local",
+      "databases:",
+      "  local:",
+      "    type: sqlite",
+      "    path: data/local.sqlite",
+      "  research:",
+      "    type: sqlite",
+      "    path: data/research.sqlite",
+    ]);
+    runCli(projectDir, ["db", "init"]);
+    insertRecord(projectDir, {
+      id: 'records-project:coins_list:["btc"]',
+      entity: "coins_list",
+      localId: '["btc"]',
+      source: "local_source",
+      updatedAt: "2026-07-05T12:00:00.000Z",
+      databaseName: "local",
+    });
+    insertRecord(projectDir, {
+      id: 'records-project:coins_list:["eth"]',
+      entity: "coins_list",
+      localId: '["eth"]',
+      source: "research_source",
+      updatedAt: "2026-07-05T13:00:00.000Z",
+      databaseName: "research",
+    });
+
+    const defaultList = runCli(projectDir, ["records", "list"]).stdout;
+    const researchList = runCli(projectDir, ["records", "list", "--database", "research"]).stdout;
+    const researchShow = JSON.parse(
+      runCli(projectDir, ["records", "show", 'records-project:coins_list:["eth"]', "--database", "research"]).stdout,
+    ) as { source: string | null };
+
+    expect(defaultList).toContain('records-project:coins_list:["btc"]');
+    expect(defaultList).not.toContain('records-project:coins_list:["eth"]');
+    expect(researchList).toContain('records-project:coins_list:["eth"]');
+    expect(researchList).not.toContain('records-project:coins_list:["btc"]');
+    expect(researchShow.source).toBe("research_source");
+  });
+
+  it("fails clearly for unknown configured databases", () => {
+    const projectDir = makeTempProject("records-unknown-db");
+    seedRecords(projectDir);
+
+    expect(() => runCli(projectDir, ["records", "list", "--database", "missing"])).toThrow(
+      /unknown database "missing"/,
+    );
+    expect(() => runCli(projectDir, ["records", "show", 'records-project:coins_list:["btc"]', "--database", "missing"])).toThrow(
+      /unknown database "missing"/,
+    );
   });
 });

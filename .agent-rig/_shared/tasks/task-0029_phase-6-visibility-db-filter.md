@@ -2,18 +2,23 @@
 id: task-0029
 title: "Phase 6: add database filtering to records and runs"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
-updated_on: 2026-07-06
+updated_on: 2026-07-07
 priority: normal
 parent: ""
 depends_on:
   - task-0028
-message: "Add --database support to records and runs visibility commands so
-  users can inspect non-default SQLite databases."
+message: "Reviewer accepted: records and runs visibility commands now support
+  --database, default to defaultDatabase when omitted, isolate reads and
+  clear-running updates to the selected database, and fail clearly on unknown
+  database names. npm test/typecheck/diff-check passed."
 ---
+
+
+
 
 # Task
 

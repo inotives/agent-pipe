@@ -2,18 +2,23 @@
 id: task-0031
 title: "Phase 6: add acceptance coverage, README updates, and live smoke notes"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-06
-updated_on: 2026-07-06
+updated_on: 2026-07-07
 priority: normal
 parent: ""
 depends_on:
   - task-0030
-message: "Add end-to-end multi-DB acceptance coverage, update README for the
-  implemented Phase 6 behavior, and run the CoinGecko live smoke when possible."
+message: "Reviewer accepted: Phase 6 now has deterministic end-to-end multi-db
+  acceptance coverage, README documents implemented multi-db behavior and
+  commands, and live CoinGecko smoke notes are recorded in the task notes for
+  both default and research databases. npm test/typecheck/diff-check passed."
 ---
+
+
+
 
 # Task
 
@@ -60,3 +65,9 @@ Automated tests should stay deterministic and avoid external network. The live C
 - [ ] `git diff --check` passes.
 
 ## Notes
+- 2026-07-07 live CoinGecko smoke run in `/private/tmp/agent-pipe-task31.nIB8F7`.
+- First default-db attempt inside the sandbox failed with literal error `fetch failed`; reran with network approval for live validation.
+- `source run coingecko_coins_list` succeeded in `local`: `recordsWritten=17345`, `jobRunId=e9f4fdbb-bf48-4225-91e8-a17321acd8c7`.
+- `source run coingecko_coins_markets` was configured with `database: research` and succeeded in `research`: `recordsWritten=500`, `jobRunId=38b24ad1-1cc2-43b1-83a1-4659ee3ee951`.
+- Post-run counts from the SQLite files: `local.records=17345`, `local.runs=2` (one sandbox-blocked failed run plus one succeeded live run), `research.records=500`, `research.runs=1`.
+- `db status` reported `schemaStatus=ok` with all managed tables and built-in indexes present for both `local` and `research`.

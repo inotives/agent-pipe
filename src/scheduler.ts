@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 
 import { runJob } from "./job-run.js";
 import { findProjectRoot } from "./project.js";
+import { bootstrapProjectDatabase, resolveProjectDatabase, type ResolvedProjectDatabase } from "./runtime.js";
 import { loadSchedulesConfig } from "./schedules.js";
 
 type SchedulerStartOptions = {
@@ -22,6 +23,7 @@ type SchedulerEvent = {
   timestamp: string;
   jobId?: string;
   jobRunId?: string;
+  database?: string;
   recordsWritten?: number;
   errorMessage?: string;
 };
@@ -33,6 +35,10 @@ export async function runSchedulerStart(cwd: string, options: SchedulerStartOpti
   }
 
   const schedulesPath = path.join(projectRoot, ".agent-pipe", "schedules.yaml");
+  const projectConfigPath = path.join(projectRoot, ".agent-pipe", "project.yaml");
+  if (!fs.existsSync(projectConfigPath)) {
+    throw new Error("missing .agent-pipe/project.yaml; run `agent-pipe init` first");
+  }
   if (!fs.existsSync(schedulesPath)) {
     throw new Error("missing .agent-pipe/schedules.yaml; run `agent-pipe init` first");
   }
@@ -46,7 +52,7 @@ export async function runSchedulerStart(cwd: string, options: SchedulerStartOpti
   pushEvent(events, "scheduler_started", nowProvider());
 
   for (let tick = 0; maxTicks === undefined || tick < maxTicks; tick += 1) {
-    await runSchedulerTick({ cwd, projectRoot, schedules, now: nowProvider(), events });
+    await runSchedulerTick({ cwd, projectRoot, projectConfigPath, schedules, now: nowProvider(), events });
     if (options.once || (maxTicks !== undefined && tick + 1 >= maxTicks)) {
       break;
     }
@@ -59,43 +65,32 @@ export async function runSchedulerStart(cwd: string, options: SchedulerStartOpti
 async function runSchedulerTick(input: {
   cwd: string;
   projectRoot: string;
+  projectConfigPath: string;
   schedules: ReturnType<typeof loadSchedulesConfig>;
   now: Date;
   events: SchedulerEvent[];
 }): Promise<void> {
   pushEvent(input.events, "tick_started", input.now);
 
+  const dueJobsByDatabase = new Map<string, Array<{ jobId: string; database: ResolvedProjectDatabase }>>();
+
   for (const [jobId, job] of Object.entries(input.schedules.jobs)) {
     if (job.schedule.type !== "cron" || !isDueThisMinute(job.schedule.expression, input.now)) {
       continue;
     }
 
-    pushEvent(input.events, "job_due", input.now, { jobId });
-    if (hasAnyRunningJob(input.projectRoot)) {
-      pushEvent(input.events, "job_skipped", new Date(), {
-        jobId,
-        errorMessage: "scheduler skipped job because another job is already running",
-      });
-      pushEvent(input.events, "tick_finished", new Date());
-      return;
+    const database = resolveProjectDatabase(input.projectConfigPath, job.database);
+    const jobs = dueJobsByDatabase.get(database.name);
+    if (jobs) {
+      jobs.push({ jobId, database });
+    } else {
+      dueJobsByDatabase.set(database.name, [{ jobId, database }]);
     }
-
-    try {
-      const result = await runJob(input.cwd, { jobId });
-      pushEvent(input.events, "job_succeeded", new Date(), {
-        jobId,
-        jobRunId: result.jobRunId,
-        recordsWritten: result.recordsWritten,
-      });
-    } catch (error) {
-      pushEvent(input.events, "job_failed", new Date(), {
-        jobId,
-        errorMessage: error instanceof Error ? error.message : "scheduler job failed",
-      });
-    }
-    pushEvent(input.events, "tick_finished", new Date());
-    return;
   }
+
+  await Promise.all(
+    Array.from(dueJobsByDatabase.values(), (jobs) => runSchedulerDatabaseGroup(input.cwd, input.events, input.now, jobs)),
+  );
 
   pushEvent(input.events, "tick_finished", new Date());
 }
@@ -136,13 +131,45 @@ function parsePollIntervalMs(value: number | undefined): number {
   return value;
 }
 
-function hasAnyRunningJob(projectRoot: string): boolean {
-  const databasePath = path.join(projectRoot, ".agent-pipe", "data", "local.sqlite");
-  if (!fs.existsSync(databasePath)) {
-    throw new Error("missing .agent-pipe/data/local.sqlite; run `agent-pipe init` first");
-  }
+async function runSchedulerDatabaseGroup(
+  cwd: string,
+  events: SchedulerEvent[],
+  dueAt: Date,
+  jobs: Array<{ jobId: string; database: ResolvedProjectDatabase }>,
+): Promise<void> {
+  for (const job of jobs) {
+    pushEvent(events, "job_due", dueAt, { jobId: job.jobId, database: job.database.name });
+    if (hasRunningJobInDatabase(job.database)) {
+      pushEvent(events, "job_skipped", new Date(), {
+        jobId: job.jobId,
+        database: job.database.name,
+        errorMessage: "scheduler skipped job because another job is already running in this database",
+      });
+      continue;
+    }
 
-  const database = new Database(databasePath, { readonly: true });
+    try {
+      const result = await runJob(cwd, { jobId: job.jobId });
+      pushEvent(events, "job_succeeded", new Date(), {
+        jobId: job.jobId,
+        database: job.database.name,
+        jobRunId: result.jobRunId,
+        recordsWritten: result.recordsWritten,
+      });
+    } catch (error) {
+      pushEvent(events, "job_failed", new Date(), {
+        jobId: job.jobId,
+        database: job.database.name,
+        errorMessage: error instanceof Error ? error.message : "scheduler job failed",
+      });
+    }
+  }
+}
+
+function hasRunningJobInDatabase(databaseConfig: ResolvedProjectDatabase): boolean {
+  bootstrapProjectDatabase(databaseConfig.absolutePath);
+
+  const database = new Database(databaseConfig.absolutePath, { readonly: true });
   try {
     const row = database.prepare("select 1 from job_runs where status = 'running' limit 1").get() as
       | { 1: number }

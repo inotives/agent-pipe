@@ -41,8 +41,12 @@ function runCli(cwd: string, args: string[]): { stdout: string; stderr: string }
   }
 }
 
-function withDatabase(projectDir: string, fn: (database: Database.Database) => void): void {
-  const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"));
+function writeProjectYaml(projectDir: string, lines: string[]): void {
+  fs.writeFileSync(path.join(projectDir, ".agent-pipe/project.yaml"), `${lines.join("\n")}\n`, "utf8");
+}
+
+function withDatabase(projectDir: string, fn: (database: Database.Database) => void, databaseName = "local"): void {
+  const database = new Database(path.join(projectDir, `.agent-pipe/data/${databaseName}.sqlite`));
   try {
     fn(database);
   } finally {
@@ -62,6 +66,7 @@ function insertRun(
     recordsWritten: number;
     errorMessage?: string | null;
     metadata?: Record<string, unknown> | null;
+    databaseName?: string;
   },
 ): void {
   withDatabase(projectDir, (database) => {
@@ -84,7 +89,7 @@ function insertRun(
         error_message: input.errorMessage ?? null,
         metadata_json: input.metadata === null ? null : JSON.stringify(input.metadata ?? { sourceId: input.jobId }),
       });
-  });
+  }, input.databaseName);
 }
 
 function seedRuns(projectDir: string): void {
@@ -334,5 +339,79 @@ describe("agent-pipe runs", () => {
     };
 
     expect(output).toEqual({ jobId: "missing_job", cleared: 0 });
+  });
+
+  it("reads and updates only the selected configured database", () => {
+    const projectDir = makeTempProject("runs-database");
+    runCli(projectDir, ["init"]);
+    writeProjectYaml(projectDir, [
+      "projectId: runs-project",
+      'projectName: "Runs Project"',
+      "defaultDatabase: local",
+      "databases:",
+      "  local:",
+      "    type: sqlite",
+      "    path: data/local.sqlite",
+      "  research:",
+      "    type: sqlite",
+      "    path: data/research.sqlite",
+    ]);
+    runCli(projectDir, ["db", "init"]);
+    insertRun(projectDir, {
+      id: "local-run",
+      jobId: "local_job",
+      entity: "coins_list",
+      status: "running",
+      startedAt: "2026-07-05T12:00:00.000Z",
+      recordsWritten: 0,
+      databaseName: "local",
+    });
+    insertRun(projectDir, {
+      id: "research-run",
+      jobId: "research_job",
+      entity: "coins_list",
+      status: "running",
+      startedAt: "2026-07-05T13:00:00.000Z",
+      recordsWritten: 0,
+      databaseName: "research",
+    });
+
+    const defaultList = runCli(projectDir, ["runs", "list"]).stdout;
+    const researchList = runCli(projectDir, ["runs", "list", "--database", "research"]).stdout;
+    const researchShow = JSON.parse(
+      runCli(projectDir, ["runs", "show", "research-run", "--database", "research"]).stdout,
+    ) as { job_id: string };
+    const clear = JSON.parse(
+      runCli(projectDir, ["runs", "clear-running", "--job-id", "research_job", "--database", "research"]).stdout,
+    ) as { jobId: string; cleared: number };
+
+    expect(defaultList).toContain("local-run");
+    expect(defaultList).not.toContain("research-run");
+    expect(researchList).toContain("research-run");
+    expect(researchList).not.toContain("local-run");
+    expect(researchShow.job_id).toBe("research_job");
+    expect(clear).toEqual({ jobId: "research_job", cleared: 1 });
+
+    withDatabase(projectDir, (database) => {
+      const row = database.prepare("select status from job_runs where id = 'local-run'").get() as { status: string };
+      expect(row.status).toBe("running");
+    }, "local");
+    withDatabase(projectDir, (database) => {
+      const row = database.prepare("select status from job_runs where id = 'research-run'").get() as { status: string };
+      expect(row.status).toBe("failed");
+    }, "research");
+  });
+
+  it("fails clearly for unknown configured databases", () => {
+    const projectDir = makeTempProject("runs-unknown-db");
+    seedRuns(projectDir);
+
+    expect(() => runCli(projectDir, ["runs", "list", "--database", "missing"])).toThrow(/unknown database "missing"/);
+    expect(() => runCli(projectDir, ["runs", "show", "run-1", "--database", "missing"])).toThrow(
+      /unknown database "missing"/,
+    );
+    expect(() => runCli(projectDir, ["runs", "clear-running", "--job-id", "x", "--database", "missing"])).toThrow(
+      /unknown database "missing"/,
+    );
   });
 });

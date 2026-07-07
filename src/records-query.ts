@@ -1,12 +1,12 @@
-import fs from "node:fs";
 import path from "node:path";
 
 import Database from "better-sqlite3";
 
-import { ensureSupportedSchemaVersion } from "./init.js";
 import { findProjectRoot } from "./project.js";
+import { ensureSupportedSchemaVersion, resolveProjectDatabase } from "./runtime.js";
 
 type RecordsListOptions = {
+  database?: string;
   entity?: string;
   source?: string;
   limit?: string | number;
@@ -37,7 +37,7 @@ type RecordDetailsRow = {
 
 export function runRecordsList(cwd: string, options: RecordsListOptions): string {
   const limit = parseLimit(options.limit);
-  const database = openProjectDatabase(cwd);
+  const database = openProjectDatabase(cwd, options.database);
   try {
     const rows = listRecords(database, {
       entity: options.entity,
@@ -54,8 +54,8 @@ export function runRecordsList(cwd: string, options: RecordsListOptions): string
   }
 }
 
-export function runRecordsShow(cwd: string, id: string): string {
-  const database = openProjectDatabase(cwd);
+export function runRecordsShow(cwd: string, id: string, databaseName?: string): string {
+  const database = openProjectDatabase(cwd, databaseName);
   try {
     const row = database
       .prepare(`
@@ -102,16 +102,14 @@ export function runRecordsShow(cwd: string, id: string): string {
   }
 }
 
-function openProjectDatabase(cwd: string): Database.Database {
+function openProjectDatabase(cwd: string, databaseName?: string): Database.Database {
   const projectRoot = findProjectRoot(cwd);
   if (!projectRoot) {
     throw new Error("missing .agent-pipe project; run `agent-pipe init` first");
   }
 
-  const databasePath = path.join(projectRoot, ".agent-pipe", "data", "local.sqlite");
-  if (!fs.existsSync(databasePath)) {
-    throw new Error("missing .agent-pipe/data/local.sqlite; run `agent-pipe init` first");
-  }
+  const projectConfigPath = path.join(projectRoot, ".agent-pipe", "project.yaml");
+  const databasePath = resolveProjectDatabase(projectConfigPath, databaseName).absolutePath;
 
   const database = new Database(databasePath, { readonly: true });
   ensureSupportedSchemaVersion(database);

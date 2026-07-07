@@ -61,8 +61,12 @@ function writeScript(projectDir: string, fileName: string, content: string): voi
   fs.writeFileSync(path.join(projectDir, fileName), content, "utf8");
 }
 
-function withDatabase(projectDir: string, fn: (database: Database.Database) => void): void {
-  const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"));
+function writeProjectYaml(projectDir: string, lines: string[]): void {
+  fs.writeFileSync(path.join(projectDir, ".agent-pipe/project.yaml"), `${lines.join("\n")}\n`, "utf8");
+}
+
+function withDatabase(projectDir: string, fn: (database: Database.Database) => void, databaseName = "local"): void {
+  const database = new Database(path.join(projectDir, `.agent-pipe/data/${databaseName}.sqlite`));
   try {
     fn(database);
   } finally {
@@ -70,8 +74,8 @@ function withDatabase(projectDir: string, fn: (database: Database.Database) => v
   }
 }
 
-function readRecords(projectDir: string): Array<Record<string, unknown>> {
-  const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), { readonly: true });
+function readRecords(projectDir: string, databaseName = "local"): Array<Record<string, unknown>> {
+  const database = new Database(path.join(projectDir, `.agent-pipe/data/${databaseName}.sqlite`), { readonly: true });
   try {
     return database
       .prepare("select id, source, payload_json, metadata_json from records order by id")
@@ -81,8 +85,8 @@ function readRecords(projectDir: string): Array<Record<string, unknown>> {
   }
 }
 
-function readJobRuns(projectDir: string): Array<Record<string, unknown>> {
-  const database = new Database(path.join(projectDir, ".agent-pipe/data/local.sqlite"), { readonly: true });
+function readJobRuns(projectDir: string, databaseName = "local"): Array<Record<string, unknown>> {
+  const database = new Database(path.join(projectDir, `.agent-pipe/data/${databaseName}.sqlite`), { readonly: true });
   try {
     return database
       .prepare(
@@ -468,5 +472,61 @@ describe("agent-pipe run --job", () => {
       error_message: 'job "collect_prices" is already running',
       metadata_json: expect.stringContaining('"timeoutMs":60000'),
     });
+  });
+
+  it("writes job records and run history to the configured job database", () => {
+    const projectDir = makeTempProject("job-run-research");
+    runCli(projectDir, ["init"]);
+    writeProjectYaml(projectDir, [
+      "projectId: job-run-research",
+      'projectName: "Job Run Research"',
+      "defaultDatabase: local",
+      "databases:",
+      "  local:",
+      "    type: sqlite",
+      "    path: data/local.sqlite",
+      "  research:",
+      "    type: sqlite",
+      "    path: data/research.sqlite",
+    ]);
+    fs.rmSync(path.join(projectDir, ".agent-pipe/data/research.sqlite"), { force: true });
+    writeScript(projectDir, "collect-research.mjs", 'console.log(JSON.stringify({ id: "bitcoin" }));\n');
+    writeSchedules(
+      projectDir,
+      [
+        "  collect_prices:",
+        "    database: research",
+        "    entity: coins_list",
+        "    command: node ./collect-research.mjs",
+      ].join("\n"),
+    );
+
+    const result = JSON.parse(runCli(projectDir, ["run", "--job", "collect_prices"]).stdout) as { jobRunId: string };
+
+    expect(fs.existsSync(path.join(projectDir, ".agent-pipe/data/research.sqlite"))).toBe(true);
+    expect(readRecords(projectDir, "local")).toHaveLength(0);
+    expect(readRecords(projectDir, "research")).toHaveLength(1);
+    expect(readJobRuns(projectDir, "local")).toHaveLength(0);
+    expect(readJobRuns(projectDir, "research")[0]?.id).toBe(result.jobRunId);
+  });
+
+  it("fails clearly for unknown configured job databases", () => {
+    const projectDir = makeTempProject("job-run-unknown-db");
+    runCli(projectDir, ["init"]);
+    writeScript(projectDir, "collect-one.mjs", 'console.log(JSON.stringify({ id: "bitcoin" }));\n');
+    writeSchedules(
+      projectDir,
+      [
+        "  collect_prices:",
+        "    database: missing",
+        "    entity: coins_list",
+        "    command: node ./collect-one.mjs",
+      ].join("\n"),
+    );
+
+    const result = runCli(projectDir, ["run", "--job", "collect_prices"]);
+
+    expect(result.stderr).toContain('unknown database "missing" for job "collect_prices"');
+    expect(readJobRuns(projectDir)[0]?.status).toBe("failed");
   });
 });

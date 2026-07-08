@@ -10,6 +10,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const tempDirs: string[] = [];
 const repoRoot = path.resolve(__dirname, "..");
+const sampleJsonPath = path.join(repoRoot, "data/json/tracked-tickers.json");
+const sampleCsvPath = path.join(repoRoot, "data/csv/DFF.csv");
+const sampleMarkdownPath = path.join(
+  repoRoot,
+  "data/markdown/2026-07-06__agent-memory-tools-context-mode-codegraph.md",
+);
 const tsxLoader = path.join(repoRoot, "node_modules/tsx/dist/loader.mjs");
 const cliEntry = path.join(repoRoot, "src/index.ts");
 const execFileAsync = promisify(execFile);
@@ -95,6 +101,12 @@ databases:
 `,
     "utf8",
   );
+}
+
+function copyProjectFile(projectDir: string, fromPath: string, toRelativePath: string): void {
+  const targetPath = path.join(projectDir, toRelativePath);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.copyFileSync(fromPath, targetPath);
 }
 
 afterEach(() => {
@@ -691,6 +703,160 @@ describe("Phase acceptance", () => {
     } finally {
       researchDatabase.close();
     }
+  });
+
+  it("covers Phase 7 file sources through source run, records visibility, run visibility, and README docs", () => {
+    const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    expect(readme).toContain("type: file");
+    expect(readme).toContain("format: json");
+    expect(readme).toContain("format: csv");
+    expect(readme).toContain("format: markdown");
+    expect(readme).toContain("resolves relative to the project root");
+    expect(readme).toContain("npm run agent-pipe -- source run tracked_tickers");
+    expect(readme).toContain("npm run agent-pipe -- source run fed_funds");
+    expect(readme).toContain("npm run agent-pipe -- source run research_note");
+
+    const projectDir = makeTempProject("acceptance-file-sources");
+    const initResult = JSON.parse(runCli(projectDir, ["init"])) as { projectId: string };
+    copyProjectFile(projectDir, sampleJsonPath, "data/json/tracked-tickers.json");
+    copyProjectFile(projectDir, sampleCsvPath, "data/csv/DFF.csv");
+    copyProjectFile(
+      projectDir,
+      sampleMarkdownPath,
+      "data/markdown/2026-07-06__agent-memory-tools-context-mode-codegraph.md",
+    );
+    fs.writeFileSync(
+      path.join(projectDir, ".agent-pipe", "sources.yaml"),
+      `sources:
+  tracked_tickers:
+    entity: tickers
+    type: file
+    idFields: [symbol]
+    file:
+      path: data/json/tracked-tickers.json
+      format: json
+  fed_funds:
+    entity: rates
+    type: file
+    idFields: [observation_date]
+    file:
+      path: data/csv/DFF.csv
+      format: csv
+  research_note:
+    entity: notes
+    type: file
+    idFields: [path]
+    file:
+      path: data/markdown/2026-07-06__agent-memory-tools-context-mode-codegraph.md
+      format: markdown
+`,
+      "utf8",
+    );
+
+    expect(initResult.projectId).toBe("acceptance-file-sources");
+
+    const jsonRun = JSON.parse(runCli(projectDir, ["source", "run", "tracked_tickers"])) as {
+      sourceId: string;
+      recordsWritten: number;
+      jobRunId: string;
+    };
+    const csvRun = JSON.parse(runCli(projectDir, ["source", "run", "fed_funds"])) as {
+      sourceId: string;
+      recordsWritten: number;
+      jobRunId: string;
+    };
+    const markdownRun = JSON.parse(runCli(projectDir, ["source", "run", "research_note"])) as {
+      sourceId: string;
+      recordsWritten: number;
+      jobRunId: string;
+    };
+    expect(jsonRun).toMatchObject({
+      sourceId: "tracked_tickers",
+      recordsWritten: 11,
+      jobRunId: expect.any(String),
+    });
+    expect(csvRun.recordsWritten).toBe(fs.readFileSync(sampleCsvPath, "utf8").trim().split("\n").length - 1);
+    expect(markdownRun).toMatchObject({
+      sourceId: "research_note",
+      recordsWritten: 1,
+      jobRunId: expect.any(String),
+    });
+
+    const recordsList = runCli(projectDir, ["records", "list"]);
+    expect(recordsList).toContain("fed_funds");
+    expect(recordsList).toContain(
+      'acceptance-file-sources:notes:["data/markdown/2026-07-06__agent-memory-tools-context-mode-codegraph.md"]',
+    );
+
+    const jsonRecordShow = JSON.parse(
+      runCli(projectDir, ["records", "show", 'acceptance-file-sources:tickers:["AMZN"]']),
+    ) as { payload: Record<string, unknown>; metadata: Record<string, unknown> | null };
+    expect(jsonRecordShow).toMatchObject({
+      payload: { symbol: "AMZN", company: "Amazon.com, Inc." },
+      metadata: {
+        ingestionType: "file",
+        path: "data/json/tracked-tickers.json",
+        format: "json",
+      },
+    });
+    expect(jsonRecordShow.metadata?.itemIndex).toEqual(expect.any(Number));
+
+    const csvRecordShow = JSON.parse(
+      runCli(projectDir, ["records", "show", 'acceptance-file-sources:rates:["2021-07-06"]']),
+    ) as { payload: Record<string, unknown>; metadata: Record<string, unknown> | null };
+    expect(csvRecordShow).toMatchObject({
+      payload: { observation_date: "2021-07-06", DFF: "0.10" },
+      metadata: {
+        ingestionType: "file",
+        path: "data/csv/DFF.csv",
+        format: "csv",
+        rowNumber: 2,
+      },
+    });
+
+    const markdownRecordShow = JSON.parse(
+      runCli(
+        projectDir,
+        [
+          "records",
+          "show",
+          'acceptance-file-sources:notes:["data/markdown/2026-07-06__agent-memory-tools-context-mode-codegraph.md"]',
+        ],
+      ),
+    ) as { payload: Record<string, unknown>; metadata: Record<string, unknown> | null };
+    expect(markdownRecordShow).toMatchObject({
+      payload: {
+        path: "data/markdown/2026-07-06__agent-memory-tools-context-mode-codegraph.md",
+        title: "Agent Memory Taxonomy: Where Do Context-Mode and Codegraph Belong?",
+      },
+      metadata: {
+        ingestionType: "file",
+        path: "data/markdown/2026-07-06__agent-memory-tools-context-mode-codegraph.md",
+        format: "markdown",
+      },
+    });
+    expect(String(markdownRecordShow.payload.content)).toContain("# Agent Memory Taxonomy");
+
+    const runsList = runCli(projectDir, ["runs", "list"]);
+    expect(runsList).toContain("tracked_tickers");
+    expect(runsList).toContain("fed_funds");
+    expect(runsList).toContain("research_note");
+    expect(runsList).toContain("succeeded");
+
+    const markdownRunShow = JSON.parse(runCli(projectDir, ["runs", "show", markdownRun.jobRunId])) as {
+      id: string;
+      job_id: string;
+      status: string;
+      records_written: number;
+      metadata: Record<string, unknown> | null;
+    };
+    expect(markdownRunShow).toMatchObject({
+      id: markdownRun.jobRunId,
+      job_id: "research_note",
+      status: "succeeded",
+      records_written: 1,
+      metadata: { sourceId: "research_note" },
+    });
   });
 });
 

@@ -79,7 +79,59 @@ Implemented source support:
 - `${NAME}` placeholders from `.agent-pipe/.env.local` and process env
 - `rateLimit.minDelayMs`
 
-Unsupported source types such as `file`, `stream`, and `graphql` fail clearly for now.
+## File Sources
+
+`source run` also supports local file ingestion with `type: file`. `file.path` resolves relative to the project root; absolute paths and paths escaping the project root are rejected.
+
+Example `.agent-pipe/sources.yaml`:
+
+```yaml
+sources:
+  tracked_tickers:
+    entity: tickers
+    type: file
+    idFields:
+      - symbol
+    file:
+      path: data/json/tracked-tickers.json
+      format: json
+
+  fed_funds:
+    entity: rates
+    type: file
+    idFields:
+      - observation_date
+    file:
+      path: data/csv/DFF.csv
+      format: csv
+
+  research_note:
+    entity: notes
+    type: file
+    idFields:
+      - path
+    file:
+      path: data/markdown/2026-07-06__agent-memory-tools-context-mode-codegraph.md
+      format: markdown
+```
+
+Run them with:
+
+```bash
+npm run agent-pipe -- source run tracked_tickers
+npm run agent-pipe -- source run fed_funds
+npm run agent-pipe -- source run research_note
+```
+
+Implemented file-source support:
+
+- `file.format: json`
+- `file.format: csv`
+- `file.format: markdown`
+- project-root-relative `file.path`
+- JSON top-level object or array of objects
+- CSV header row parsing with `csv-parse`
+- Markdown payload `{ path, title, content }`
 
 ## Visibility
 

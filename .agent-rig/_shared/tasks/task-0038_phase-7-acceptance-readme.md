@@ -2,7 +2,7 @@
 id: task-0038
 title: "Phase 7: add acceptance coverage and README updates"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-08
@@ -11,8 +11,12 @@ priority: normal
 parent: ""
 depends_on:
   - task-0037
-message: "Ready: add end-to-end Phase 7 acceptance coverage and document file sources in README."
+message: "Reviewer accepted: Phase 7 acceptance coverage and README file-source
+  documentation match task 38."
 ---
+
+
+
 
 
 
@@ -62,3 +66,6 @@ Keep tests deterministic. Do not add live external-network smoke for file source
 - [ ] `git diff --check` passes.
 
 ## Notes
+- 2026-07-08: Added a Phase 7 acceptance test that initializes a temp project, configures one JSON file source, one CSV file source, and one Markdown file source, runs each via `source run`, and verifies records plus run visibility through the CLI.
+- 2026-07-08: Updated `README.md` to document `type: file`, `file.format: json|csv|markdown`, project-root-relative `file.path`, and example `source run` commands for each file source.
+- 2026-07-08: Verified with `npm test -- tests/acceptance.test.ts`, `npm run typecheck`, `npm test`, and `git diff --check`.

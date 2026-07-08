@@ -2,7 +2,7 @@
 id: task-0033
 title: "Phase 7: add file source config parsing"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-08
@@ -10,8 +10,12 @@ updated_on: 2026-07-08
 priority: normal
 parent: ""
 depends_on: []
-message: "Ready: add Phase 7 file source config parsing and validation without changing API source behavior."
+message: "Reviewer accepted: file source config parsing and selected-source
+  validation match Phase 7 task 33."
 ---
+
+
+
 
 
 
@@ -57,3 +61,6 @@ This task should establish the YAML contract only. Do not implement file reading
 - [ ] `git diff --check` passes.
 
 ## Notes
+- 2026-07-08: Added selected-source parsing for `type: file` with required `file.path`, supported `file.format` values, and explicit `idFields` validation.
+- 2026-07-08: Kept validation source-specific so unrelated invalid sibling sources still do not block the selected source.
+- 2026-07-08: Verified with `npm test`, `npm run typecheck`, and `git diff --check`.

@@ -2,7 +2,7 @@
 id: task-0037
 title: "Phase 7: harden file source routing and atomicity"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-08
@@ -11,8 +11,12 @@ priority: normal
 parent: ""
 depends_on:
   - task-0036
-message: "Ready: verify file sources are all-or-nothing and route correctly across configured databases."
+message: "Reviewer accepted: file source atomicity, default/non-default database
+  routing, and unknown-database failures match Phase 7 task 37."
 ---
+
+
+
 
 
 
@@ -59,3 +63,7 @@ This task may mostly add tests and small refactors. Avoid broad abstractions unl
 - [ ] `git diff --check` passes.
 
 ## Notes
+- 2026-07-08: Verified the shared file-source flow stays all-or-nothing by parsing and validating payloads before any `upsertRecords` call for JSON, CSV, and Markdown sources.
+- 2026-07-08: Added cross-format routing coverage proving JSON, CSV, and Markdown file sources write both records and `job_runs` history to the configured non-default database instead of the default database.
+- 2026-07-08: Added cross-format unknown-database coverage proving file sources fail clearly before any write when `database` references a missing configured database.
+- 2026-07-08: Verified with `npm test -- tests/source-run.test.ts`, `npm run typecheck`, `npm test`, and `git diff --check`.

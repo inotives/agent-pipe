@@ -2,7 +2,7 @@
 id: task-0034
 title: "Phase 7: implement JSON file source ingestion"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-08
@@ -11,8 +11,12 @@ priority: normal
 parent: ""
 depends_on:
   - task-0033
-message: "Ready: implement JSON file source ingestion through source run with all-or-nothing writes."
+message: "Reviewer accepted: JSON file source ingestion, path safety,
+  all-or-nothing writes, and run history match Phase 7 task 34."
 ---
+
+
+
 
 
 
@@ -63,3 +67,8 @@ JSON should prove the full file-source write path before CSV and Markdown add fo
 - [ ] `git diff --check` passes.
 
 ## Notes
+- 2026-07-08: Human confirmed the repo `data/` folder contains the sample data intended for Phase 7 file-source work and related test coverage.
+- 2026-07-08: Implemented `file.format: json` ingestion through `source run` with project-root-relative path enforcement, absolute/escaping path rejection, and all-or-nothing writes.
+- 2026-07-08: Reused existing record upsert and run-history flow; file metadata now includes `ingestionType`, `path`, `format`, and `itemIndex` for JSON arrays.
+- 2026-07-08: Added focused coverage for sample-data array ingestion, single-object ingestion, invalid JSON/shape failures, path safety, and selected database routing.
+- 2026-07-08: Verified with `npm test`, `npm run typecheck`, and `git diff --check`.

@@ -2,7 +2,7 @@
 id: task-0036
 title: "Phase 7: add Markdown file source ingestion"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-08
@@ -11,8 +11,12 @@ priority: normal
 parent: ""
 depends_on:
   - task-0035
-message: "Ready: add Markdown file source ingestion as one record per file."
+message: "Reviewer accepted: Markdown file source ingestion, H1 title
+  extraction, filename fallback, and metadata match Phase 7 task 36."
 ---
+
+
+
 
 
 
@@ -60,3 +64,7 @@ Do not add frontmatter parsing or heading chunking in this phase.
 - [ ] `git diff --check` passes.
 
 ## Notes
+- 2026-07-08: Implemented `file.format: markdown` ingestion through `source run` as one record per file, reusing the existing path safety, database routing, and run-history flow.
+- 2026-07-08: Markdown payloads now store `{ path, title, content }`, using the first H1 as `title` and falling back to the filename without extension when no H1 exists.
+- 2026-07-08: Added focused coverage for repo sample Markdown ingestion, filename fallback title behavior, `idFields: [path]`, and markdown metadata.
+- 2026-07-08: Verified with `npm test -- tests/source-run.test.ts`, `npm run typecheck`, `npm test`, and `git diff --check`.

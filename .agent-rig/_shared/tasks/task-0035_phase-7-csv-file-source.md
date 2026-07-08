@@ -2,7 +2,7 @@
 id: task-0035
 title: "Phase 7: add CSV file source ingestion"
 type: task
-status: ready
+status: done
 assigned_to: worker
 created_by: human
 created_on: 2026-07-08
@@ -11,8 +11,14 @@ priority: normal
 parent: ""
 depends_on:
   - task-0034
-message: "Ready: add CSV file source ingestion using csv-parse while preserving cell values as strings."
+message: "Reviewer accepted: CSV file source ingestion, header validation,
+  all-or-nothing writes, and csv-parse behavior match Phase 7 task 35."
 ---
+
+
+
+
+
 
 
 
@@ -61,3 +67,11 @@ Do not hand-roll CSV parsing. The dependency is intentional because correct CSV 
 - [ ] `git diff --check` passes.
 
 ## Notes
+- 2026-07-08 Fix: CSV header validation now requires the configured `idFields` to exist in the parsed header row, so headerless data-only CSV input fails immediately with the expected missing-header error instead of a later missing-id-field error.
+- 2026-07-08 Fix: Added explicit regression coverage for a headerless CSV (`1,ok\n2,still-ok\n`) so this case cannot slip through review again.
+- 2026-07-08 Reviewer finding: `src/source-run.ts` accepts a headerless CSV like `1,ok\n2,still-ok\n` because `csv-parse` with `columns: true` treats the first data row as headers. The run then fails later with `missing id field "id" for entity "notes"` instead of a clear missing-header error. This misses the task requirement that missing headers fail clearly.
+- 2026-07-08 Reviewer finding: `tests/source-run.test.ts` covers blank-header and malformed CSV cases but does not cover a headerless data-only CSV, so the regression slips through.
+- 2026-07-08: Added `csv-parse` as the Phase 7 CSV parser dependency instead of hand-rolling CSV parsing.
+- 2026-07-08: Implemented `file.format: csv` ingestion through `source run`, preserving all cell values as strings and recording `rowNumber` metadata per record.
+- 2026-07-08: Added coverage for repo sample CSV ingestion, quoted commas, multiline quoted values, malformed headers/content, and all-or-nothing failure when any row has an invalid id field.
+- 2026-07-08: Verified with `npm test`, `npm run typecheck`, and `git diff --check`.
